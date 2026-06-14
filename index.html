@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e0e12">
+<title>Lean Shape — PPL + IBS Veg</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LeanShape">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
+</script>
+<style>
+:root{
+  --bg:#0e0e12; --panel:#16161d; --panel2:#1d1d27; --line:#2a2a36;
+  --txt:#e9e9f0; --muted:#9a9aa8; --accent:#6c8cff; --accent2:#46d6a8;
+  --warn:#ffb057; --bad:#ff6b7a; --good:#46d6a8;
+  --r:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  font-size:15px;line-height:1.45}
+body{padding:0 0 86px}
+h1,h2,h3{margin:0 0 8px}
+h1{font-size:20px} h2{font-size:17px} h3{font-size:14px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+a{color:var(--accent)}
+.wrap{max-width:680px;margin:0 auto;padding:14px}
+.head{display:flex;align-items:center;gap:10px;padding:14px 14px 6px;max-width:680px;margin:0 auto}
+.logo{font-weight:800;font-size:18px;letter-spacing:-.02em}
+.logo span{color:var(--accent)}
+.tag{color:var(--muted);font-size:12px;margin-left:auto}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:0 0 12px}
+.card.tight{padding:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.row>*{flex:1;min-width:120px}
+label{display:block;font-size:12px;color:var(--muted);margin:0 0 4px}
+input,select{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+  border-radius:10px;padding:10px;font-size:15px;outline:none}
+input:focus,select:focus{border-color:var(--accent)}
+button{background:var(--accent);color:#fff;border:none;border-radius:10px;padding:11px 14px;
+  font-size:15px;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
+button.sm{padding:7px 11px;font-size:13px}
+button.danger{background:transparent;border:1px solid var(--bad);color:var(--bad)}
+.pill{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:999px;
+  padding:4px 10px;font-size:12px;color:var(--muted);margin:0 6px 6px 0}
+.kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px dashed var(--line)}
+.kv:last-child{border:none}
+.kv b{font-weight:700}
+.muted{color:var(--muted)}
+.big{font-size:30px;font-weight:800;letter-spacing:-.02em}
+.tabbar{position:fixed;bottom:0;left:0;right:0;background:rgba(16,16,22,.94);
+  backdrop-filter:blur(12px);border-top:1px solid var(--line);display:flex;z-index:50;
+  padding-bottom:env(safe-area-inset-bottom)}
+.tabbar button{flex:1;background:none;border:none;color:var(--muted);font-size:11px;font-weight:600;
+  padding:9px 2px 8px;display:flex;flex-direction:column;align-items:center;gap:3px}
+.tabbar button .ic{font-size:19px}
+.tabbar button.on{color:var(--accent)}
+.hide{display:none}
+.ex{border:1px solid var(--line);border-radius:12px;margin:0 0 10px;overflow:hidden;background:var(--panel)}
+.ex .top{display:flex;align-items:center;gap:10px;padding:11px 12px;cursor:pointer}
+.ex .top .nm{font-weight:700}
+.ex .top .meta{font-size:12px;color:var(--muted)}
+.ex .body{padding:0 12px 12px;border-top:1px solid var(--line)}
+.badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:.03em}
+.b-rotate{background:rgba(255,176,87,.15);color:var(--warn)}
+.b-fresh{background:rgba(70,214,168,.15);color:var(--good)}
+.set{display:flex;gap:6px;align-items:center;margin:6px 0}
+.set input{padding:7px;text-align:center}
+.set .lab{width:54px;font-size:12px;color:var(--muted)}
+.alt{font-size:13px;padding:6px 0;border-bottom:1px dashed var(--line)}
+.alt:last-child{border:none}
+.note{font-size:12.5px;color:var(--muted);background:var(--panel2);border-radius:10px;padding:9px 11px;margin:8px 0}
+.meal{border:1px solid var(--line);border-radius:12px;padding:12px;margin:0 0 10px;background:var(--panel)}
+.meal .h{display:flex;justify-content:space-between;font-weight:700}
+.meal .mac{font-size:12px;color:var(--muted)}
+.foodgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.food{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+.food .fn{font-weight:600;font-size:13.5px}
+.food .fm{font-size:11px;color:var(--muted)}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin:0 0 12px}
+.seg button{flex:1;background:none;color:var(--muted);border:none;border-radius:0;font-weight:600;font-size:13px;padding:9px}
+.seg button.on{background:var(--accent);color:#fff}
+.bar{height:8px;background:var(--panel2);border-radius:6px;overflow:hidden;margin:4px 0}
+.bar>i{display:block;height:100%;background:var(--accent2)}
+.warnbox{border:1px solid var(--warn);background:rgba(255,176,87,.08);border-radius:12px;padding:11px 12px;margin:0 0 12px;font-size:13.5px}
+.goodbox{border:1px solid var(--good);background:rgba(70,214,168,.08);border-radius:12px;padding:11px 12px;margin:0 0 12px;font-size:13.5px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase}
+canvas{width:100%;height:150px;display:block}
+.foot{font-size:11px;color:var(--muted);text-align:center;padding:16px 0}
+details summary{cursor:pointer;color:var(--accent);font-size:13px;padding:4px 0}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="logo">Lean<span>Shape</span></div>
+  <div class="tag">PPL · K-athletic · IBS-veg</div>
+</div>
+
+<!-- ============ DASHBOARD ============ -->
+<section id="t-home" class="wrap">
+  <div id="phaseBox"></div>
+  <div class="card">
+    <h3>Today</h3>
+    <div id="todayPlan"></div>
+  </div>
+  <div class="card">
+    <h3>Snapshot</h3>
+    <div id="snapshot"><div class="muted">Enter your stats in the Stats tab to get started.</div></div>
+  </div>
+  <div class="card">
+    <h3>How the plan works</h3>
+    <div class="note">5-day <b>Push / Pull / Legs / Push / Pull</b> rotation tuned for a lean, K-pop athletic look: capped shoulders, upper-chest & back width, tight waist, lean glutes/hamstrings — moderate loads, 8–15 reps, lots of cables & isolation, minimal heavy lower-back-loading bulk work.</div>
+    <div class="note">Rotate any exercise every <b>6–8 weeks</b>, or instantly swap to a listed alternative if a machine is taken. The app flags lifts due for rotation with an orange <span class="badge b-rotate">rotate</span> tag.</div>
+  </div>
+</section>
+
+<!-- ============ STATS ============ -->
+<section id="t-stats" class="wrap hide">
+  <div class="card">
+    <h2>Body stats</h2>
+    <div class="row">
+      <div><label>Sex</label><select id="s_sex"><option value="m">Male</option><option value="f">Female</option></select></div>
+      <div><label>Age</label><input id="s_age" type="number" inputmode="numeric" placeholder="27"></div>
+    </div>
+    <div class="row">
+      <div><label>Height (cm)</label><input id="s_ht" type="number" inputmode="decimal" placeholder="175"></div>
+      <div><label>Weight (kg)</label><input id="s_wt" type="number" inputmode="decimal" placeholder="68"></div>
+    </div>
+    <div class="row">
+      <div><label>Activity</label><select id="s_act">
+        <option value="1.375">Light (desk + 5 lifts/wk)</option>
+        <option value="1.465" selected>Moderate (lift + some steps)</option>
+        <option value="1.55">Active (10k+ steps daily)</option>
+        <option value="1.65">Very active (on feet all day)</option>
+      </select></div>
+      <div><label>Goal lean look</label><select id="s_goal">
+        <option value="lean">Lean & defined</option>
+        <option value="recomp" selected>Recomp / slow gain</option>
+        <option value="size">Add visible size</option>
+      </select></div>
+    </div>
+    <div class="note">Don't know your body-fat %? Fill the 3 tape measurements below and the app estimates it (U.S. Navy method) — good enough to pick cut vs. bulk.</div>
+    <h3 style="margin-top:6px">Tape (optional, for BF% est.)</h3>
+    <div class="row">
+      <div><label>Waist @ navel (cm)</label><input id="s_waist" type="number" inputmode="decimal" placeholder="80"></div>
+      <div><label>Neck (cm)</label><input id="s_neck" type="number" inputmode="decimal" placeholder="37"></div>
+      <div id="hipWrap" class="hide"><label>Hip (cm)</label><input id="s_hip" type="number" inputmode="decimal" placeholder="92"></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button onclick="saveStats()">Save & log today's weight</button>
+      <button class="ghost sm" onclick="exportData()">Export</button>
+    </div>
+    <div id="statsOut" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>Weight log</h2>
+    <canvas id="wtChart" width="640" height="150"></canvas>
+    <div id="wtTrend" class="muted" style="margin:8px 0"></div>
+    <table id="wtTable"></table>
+  </div>
+</section>
+
+<!-- ============ TRAIN ============ -->
+<section id="t-train" class="wrap hide">
+  <div class="seg" id="daySeg"></div>
+  <div id="dayHead"></div>
+  <div id="exList"></div>
+  <div class="card">
+    <h3>Weekly structure</h3>
+    <div class="muted" style="font-size:13px" id="weekStruct"></div>
+  </div>
+</section>
+
+<!-- ============ DIET ============ -->
+<section id="t-diet" class="wrap hide">
+  <div id="dietTargets"></div>
+  <div class="seg">
+    <button id="dseg-plan" class="on" onclick="dietView('plan')">Day chart</button>
+    <button id="dseg-bank" onclick="dietView('bank')">Food bank</button>
+    <button id="dseg-rules" onclick="dietView('rules')">IBS rules</button>
+  </div>
+  <div id="dietBody"></div>
+</section>
+
+<!-- ============ REST TIMER (floating) ============ -->
+<div id="restBar" class="hide" style="position:fixed;left:0;right:0;bottom:62px;z-index:60;
+  display:flex;align-items:center;gap:10px;max-width:680px;margin:0 auto;padding:10px 14px;
+  background:rgba(28,28,38,.97);backdrop-filter:blur(10px);border-top:1px solid var(--line)">
+  <span class="muted" style="font-size:12px">Rest</span>
+  <b id="restTime" style="font-size:22px;min-width:62px">1:30</b>
+  <div class="bar" style="flex:1"><i id="restFill" style="width:100%"></i></div>
+  <button class="ghost sm" onclick="addRest(15)">+15s</button>
+  <button class="sm" onclick="stopRest()">Stop</button>
+</div>
+
+<!-- ============ NAV ============ -->
+<nav class="tabbar">
+  <button data-tab="home" class="on" onclick="tab('home')"><span class="ic">◎</span>Home</button>
+  <button data-tab="stats" onclick="tab('stats')"><span class="ic">📊</span>Stats</button>
+  <button data-tab="train" onclick="tab('train')"><span class="ic">🏋️</span>Train</button>
+  <button data-tab="diet" onclick="tab('diet')"><span class="ic">🥗</span>Diet</button>
+</nav>
+
+<div class="foot">LeanShape · all data stays on this device (localStorage) · not medical advice</div>
+
+<script>
+/* ---------------- storage ---------------- */
+const DB=(()=>{try{return JSON.parse(localStorage.getItem('leanshape')||'{}')}catch(e){return{}}})();
+function save(){localStorage.setItem('leanshape',JSON.stringify(DB))}
+DB.stats=DB.stats||{};
+DB.weights=DB.weights||[];      // [{d:'2026-06-14',w:68}]
+DB.rotation=DB.rotation||{};    // {exId: startDateISO}
+DB.logs=DB.logs||{};            // {exId:{sets:[{w,r}]}}
+DB.history=DB.history||[];       // [{d,t,day,setsDone,setsTotal,volume}]
+const today=()=>new Date().toISOString().slice(0,10);
+const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
+
+/* ---------------- tabs ---------------- */
+function tab(name){
+  ['home','stats','train','diet'].forEach(n=>{
+    document.getElementById('t-'+n).classList.toggle('hide',n!==name);
+    document.querySelector('.tabbar button[data-tab="'+n+'"]').classList.toggle('on',n===name);
+  });
+  if(name==='home')renderHome();
+  if(name==='stats')renderStats();
+  if(name==='train')renderTrain();
+  if(name==='diet')renderDiet();
+  window.scrollTo(0,0);
+}
+
+/* ============================================================
+   WORKOUT PROGRAM  — K-pop athletic / lean hypertrophy
+   Each exercise: primary + alternatives (for busy machine / rotation)
+   ============================================================ */
+const PROGRAM={
+ push1:{name:"Push A — Chest focus",ex:[
+   {id:"p1a",name:"Incline DB Press",sets:"4 × 8–12",cue:"Upper chest — the 'armor' look. Stop 1 rep shy of failure.",
+    alts:["Incline Smith press","Incline machine press","Incline barbell press"]},
+   {id:"p1b",name:"Flat Machine / Cable Press",sets:"3 × 10–12",cue:"Constant tension, controlled negative.",
+    alts:["Pec-dec → press hybrid","Flat DB press","Hammer-strength chest press"]},
+   {id:"p1c",name:"Cable Lateral Raise",sets:"4 × 12–18",cue:"Capped delts = shoulder-to-waist V. Lean back slightly.",
+    alts:["DB lateral raise","Machine lateral raise","Lean-away cable raise"]},
+   {id:"p1d",name:"Overhead Cable / DB Press",sets:"3 × 10–12",cue:"Front+side delt. Don't overarch.",
+    alts:["Seated DB shoulder press","Smith overhead press","Machine shoulder press"]},
+   {id:"p1e",name:"Cable Triceps Pushdown",sets:"3 × 12–15",cue:"Lean horseshoe, not mass.",
+    alts:["Overhead rope ext.","Dip machine","Single-arm pushdown"]},
+   {id:"p1f",name:"Cable Crunch",sets:"3 × 12–15",cue:"Tight waist — train abs without bloating obliques.",
+    alts:["Hanging knee raise","Machine crunch","Reverse crunch"]},
+ ]},
+ pull1:{name:"Pull A — Back width",ex:[
+   {id:"l1a",name:"Lat Pulldown (wide)",sets:"4 × 10–12",cue:"Width = the taper. Drive elbows down, slight lean.",
+    alts:["Assisted pull-up","Hammer-strength high row","Single-arm cable pulldown"]},
+   {id:"l1b",name:"Chest-Supported Row",sets:"4 × 10–12",cue:"Mid-back thickness without lower-back loading.",
+    alts:["Seated cable row","T-bar (chest pad)","Machine row"]},
+   {id:"l1c",name:"Reverse Pec-Dec / Cable Rear Delt",sets:"4 × 15–20",cue:"Rear delt = round, photogenic shoulder.",
+    alts:["Bent cable rear-delt fly","Face pull","Rear-delt machine"]},
+   {id:"l1d",name:"Face Pull",sets:"3 × 15–20",cue:"Posture & healthy shoulders for that upright K-idol stance.",
+    alts:["Band pull-apart","Reverse fly","High cable rear-delt"]},
+   {id:"l1e",name:"Incline DB Curl",sets:"3 × 10–12",cue:"Long-head biceps peak.",
+    alts:["Cable curl","Bayesian cable curl","Preacher curl"]},
+   {id:"l1f",name:"Hammer Curl",sets:"2 × 12–15",cue:"Forearm + arm thickness, lean.",
+    alts:["Rope hammer curl","Cross-body curl","Reverse curl"]},
+   {id:"l1g",name:"Hanging Knee Raise (abs)",sets:"3 × 12–15",cue:"Lower abs + deep core. Slow, no swing.",
+    alts:["Captain's chair raise","Reverse crunch","Cable crunch"]},
+ ]},
+ legs:{name:"Legs — lean & glute",ex:[
+   {id:"g1a",name:"Hack Squat / Leg Press",sets:"4 × 10–12",cue:"Quad sweep without heavy spinal load. Controlled depth.",
+    alts:["Pendulum squat","Smith squat","Belt squat"]},
+   {id:"g1b",name:"Romanian Deadlift (DB/Smith)",sets:"3 × 10–12",cue:"Hamstring + glute — the athletic posterior line.",
+    alts:["Hip thrust machine","Cable pull-through","Seated leg curl"]},
+   {id:"g1c",name:"Walking / Smith Lunge",sets:"3 × 10/leg",cue:"Glute med = the round, balanced look.",
+    alts:["Bulgarian split squat","Step-up","Reverse lunge"]},
+   {id:"g1d",name:"Seated Leg Curl",sets:"3 × 12–15",cue:"Hamstring detail.",
+    alts:["Lying leg curl","Nordic curl","Cable leg curl"]},
+   {id:"g1e",name:"Leg Extension",sets:"3 × 12–15",cue:"Teardrop quad — slow & squeeze.",
+    alts:["Sissy squat","Single-leg extension","Spanish squat"]},
+   {id:"g1f",name:"Standing Calf Raise",sets:"4 × 12–15",cue:"Lean lower-leg taper.",
+    alts:["Seated calf raise","Leg-press calf","Smith calf raise"]},
+   {id:"g1g",name:"Weighted Plank / Cable Crunch (abs)",sets:"3 × 30–45s / 12–15",cue:"Core bracing + tight waist.",
+    alts:["Ab-wheel rollout","Hanging knee raise","Machine crunch"]},
+ ]},
+ push2:{name:"Push B — Shoulder focus",ex:[
+   {id:"p2a",name:"Seated DB Shoulder Press",sets:"4 × 8–12",cue:"Delts lead today for the wide-shoulder frame.",
+    alts:["Machine shoulder press","Smith overhead press","Standing OHP"]},
+   {id:"p2b",name:"Cable Lateral Raise (high vol)",sets:"5 × 12–18",cue:"Most important lift for the K-athletic taper.",
+    alts:["DB lateral raise","Machine lateral raise","Cable Y-raise"]},
+   {id:"p2c",name:"Incline Cable / Machine Press",sets:"3 × 10–12",cue:"Upper-chest shelf.",
+    alts:["Incline DB press","Low-to-high cable fly","Incline Smith"]},
+   {id:"p2d",name:"Cable Fly (mid)",sets:"3 × 12–15",cue:"Chest 'frame' & inner line.",
+    alts:["Pec-dec","Low cable fly","Machine fly"]},
+   {id:"p2e",name:"Overhead Rope Ext.",sets:"3 × 12–15",cue:"Long-head triceps for arm length.",
+    alts:["Skull crusher","Pushdown","Dip"]},
+   {id:"p2f",name:"Hanging Leg Raise",sets:"3 × 10–15",cue:"Lower abs.",
+    alts:["Captain's chair raise","Reverse crunch","Cable crunch"]},
+ ]},
+ pull2:{name:"Pull B — Back detail",ex:[
+   {id:"l2a",name:"Neutral-Grip Pulldown",sets:"4 × 10–12",cue:"Width + lat detail, joint-friendly.",
+    alts:["Pull-up","Close-grip pulldown","Machine pulldown"]},
+   {id:"l2b",name:"Single-Arm Cable Row",sets:"3 × 12/arm",cue:"Even back, big stretch.",
+    alts:["Seated cable row","DB row","Meadows row"]},
+   {id:"l2c",name:"Straight-Arm Pulldown",sets:"3 × 12–15",cue:"Lat isolation = the sweep.",
+    alts:["Cable pullover","DB pullover","Machine pullover"]},
+   {id:"l2d",name:"Reverse Pec-Dec",sets:"4 × 15–20",cue:"Rear delt volume.",
+    alts:["Cable rear fly","Face pull","Band pull-apart"]},
+   {id:"l2e",name:"Cable / Bayesian Curl",sets:"3 × 10–12",cue:"Constant-tension biceps.",
+    alts:["Incline DB curl","EZ-bar curl","Preacher curl"]},
+   {id:"l2f",name:"Reverse Cable Curl",sets:"2 × 12–15",cue:"Forearm + elbow health.",
+    alts:["Hammer curl","Wrist curl","Reverse EZ curl"]},
+   {id:"l2g",name:"Cable Woodchop + Crunch (abs)",sets:"3 × 12–15",cue:"Obliques + abs, controlled — defined tight midsection.",
+    alts:["Pallof press","Hanging leg raise","Russian twist (light)"]},
+ ]},
+};
+const WEEK=[["push1","Mon"],["pull1","Tue"],["legs","Wed"],["push2","Thu"],["pull2","Fri"]];
+// cardio / steps prescription per day
+const CARDIO={
+ push1:"10 min incline-treadmill warm-up + 8–10k steps across the day.",
+ pull1:"5 min row/bike warm-up + 8–10k steps across the day.",
+ legs:"Skip pre-cardio (save legs). 15 min easy incline walk after + 8k steps.",
+ push2:"10 min incline-treadmill warm-up + optional 12 min steady cardio finisher.",
+ pull2:"5 min warm-up + 15–20 min Zone-2 cardio finisher (LISS) for the lean look + 10k steps.",
+};
+function todaysSlot(){
+  // Mon–Fri training, Sat/Sun rest
+  const map={1:0,2:1,3:2,4:3,5:4,6:-1,0:-1};
+  return map[new Date().getDay()];
+}
+function rotState(id){
+  const start=DB.rotation[id]||today();
+  if(!DB.rotation[id]){DB.rotation[id]=start;save();}
+  const wk=Math.floor(daysBetween(start,today())/7);
+  return {weeks:wk,due:wk>=6};
+}
+
+/* ---------------- TRAIN render ---------------- */
+let curDay=null;
+function renderTrain(){
+  if(curDay===null){const s=todaysSlot();curDay=s>=0?s:0;}
+  const seg=document.getElementById('daySeg');
+  seg.innerHTML=WEEK.map((d,i)=>`<button class="${i===curDay?'on':''}" onclick="curDay=${i};renderTrain()">${PROGRAM[d[0]].name.split(' — ')[0]}</button>`).join('');
+  const key=WEEK[curDay][0], day=PROGRAM[key];
+  document.getElementById('dayHead').innerHTML=`<div class="card tight"><b>${day.name}</b> · <span class="muted">${WEEK[curDay][1]}</span><div class="muted" style="font-size:12.5px;margin-top:4px">Tap an exercise to log sets, see alternatives, and check rotation status.</div></div>`;
+  document.getElementById('exList').innerHTML=day.ex.map(ex=>{
+    const r=rotState(ex.id);
+    const n=setCount(ex.sets), repTarget=ex.sets.split('×')[1]?.trim()||'';
+    const log=DB.logs[ex.id]||{};const sets=log.sets||[];
+    const done=sets.filter(s=>s&&s.w).length;
+    let rows='';
+    for(let i=0;i<n;i++){const s=sets[i]||{};
+      rows+=`<div class="set"><span class="lab">Set ${i+1}</span>
+        <input type="number" inputmode="decimal" placeholder="kg" value="${s.w||''}" onchange="logSet('${ex.id}',${i},'w',this.value)">
+        <input type="number" inputmode="numeric" placeholder="reps (${repTarget})" value="${s.r||''}" onchange="logSet('${ex.id}',${i},'r',this.value)">
+      </div>`;}
+    return `<div class="ex">
+      <div class="top" onclick="this.parentNode.querySelector('.body').classList.toggle('hide')">
+        <div style="flex:1">
+          <div class="nm">${ex.name}</div>
+          <div class="meta">${ex.sets}${done?` · ${done}/${n} logged`:''} · tap to log ▾</div>
+        </div>
+        <span class="badge ${r.due?'b-rotate':'b-fresh'}">${r.due?'rotate':r.weeks+'w'}</span>
+      </div>
+      <div class="body hide">
+        <div class="note">${ex.cue}</div>
+        ${r.due?`<div class="warnbox">On this variation ${r.weeks} weeks — time to rotate. Pick an alternative below, then tap “Reset rotation”.</div>`:''}
+        <h3 style="margin-top:4px">Log your sets — target ${ex.sets}</h3>
+        ${rows}
+        <div style="display:flex;gap:6px;margin:6px 0 2px">
+          <button class="ghost sm" onclick="startRest(60)">Rest 60s</button>
+          <button class="ghost sm" onclick="startRest(90)">90s</button>
+          <button class="ghost sm" onclick="startRest(120)">2 min</button>
+        </div>
+        <h3 style="margin-top:10px">Swap / rotate to</h3>
+        ${ex.alts.map(a=>`<div class="alt">↻ ${a}</div>`).join('')}
+        <button class="ghost sm" style="margin-top:8px" onclick="resetRot('${ex.id}')">Reset rotation (started new variation)</button>
+      </div>
+    </div>`;
+  }).join('');
+  // cardio + steps finisher
+  document.getElementById('exList').innerHTML+=`<div class="card"><h3>Cardio & steps</h3>
+    <div class="note">${CARDIO[key]}</div>
+    <div class="muted" style="font-size:12.5px">Lean K-athletic look = stay active daily. Aim 8–10k steps; keep cardio mostly low-intensity (Zone 2) so it doesn't eat into recovery or muscle.</div>
+    <button style="width:100%;margin-top:10px" onclick="finishWorkout('${key}')">✓ Finish workout</button></div>`+
+    historyHTML();
+  document.getElementById('weekStruct').innerHTML=
+    WEEK.map(d=>`<span class="pill">${d[1]}: ${PROGRAM[d[0]].name.split(' — ')[0]}</span>`).join('')+
+    `<span class="pill">Sat / Sun: rest + light cardio/steps</span>`;
+}
+function setCount(s){const m=s.match(/(\d+)\s*×/);return m?+m[1]:3;}
+function logSet(id,i,k,v){DB.logs[id]=DB.logs[id]||{};DB.logs[id].sets=DB.logs[id].sets||[];
+  DB.logs[id].sets[i]=DB.logs[id].sets[i]||{};DB.logs[id].sets[i][k]=v;save();}
+function resetRot(id){DB.rotation[id]=today();save();renderTrain();}
+
+/* ----- rest timer ----- */
+let restInt=null,restLeft=0,restTotal=0;
+function fmt(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+function startRest(sec){restTotal=restLeft=sec;document.getElementById('restBar').classList.remove('hide');tickRest();
+  clearInterval(restInt);restInt=setInterval(()=>{restLeft--;tickRest();
+    if(restLeft<=0){stopRest();try{navigator.vibrate&&navigator.vibrate([200,80,200]);}catch(e){}beep();}},1000);}
+function tickRest(){document.getElementById('restTime').textContent=fmt(Math.max(0,restLeft));
+  document.getElementById('restFill').style.width=Math.max(0,restLeft/restTotal*100)+'%';}
+function addRest(s){restLeft+=s;restTotal=Math.max(restTotal,restLeft);tickRest();}
+function stopRest(){clearInterval(restInt);document.getElementById('restBar').classList.add('hide');}
+function beep(){try{const a=new(window.AudioContext||window.webkitAudioContext)();const o=a.createOscillator();
+  o.connect(a.destination);o.frequency.value=880;o.start();setTimeout(()=>{o.stop();a.close();},220);}catch(e){}}
+
+/* ----- finish workout + history ----- */
+function finishWorkout(key){
+  const day=PROGRAM[key];let total=0,vol=0,done=0;
+  day.ex.forEach(ex=>{const s=(DB.logs[ex.id]||{}).sets||[];s.forEach(x=>{if(x&&x.w){done++;vol+=(+x.w||0)*(+x.r||0);}});total+=setCount(ex.sets);});
+  DB.history.unshift({d:today(),t:new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
+    day:day.name,setsDone:done,setsTotal:total,volume:Math.round(vol)});
+  // clear today's set logs so next session starts fresh, keep last-weight memory
+  day.ex.forEach(ex=>{if(DB.logs[ex.id])DB.logs[ex.id].sets=[];});
+  save();stopRest();renderTrain();
+  alert('Workout saved ✓  '+done+'/'+total+' sets · '+Math.round(vol)+' kg total volume');
+}
+function historyHTML(){
+  if(!DB.history.length)return '';
+  return `<div class="card"><h3>Recent sessions</h3>`+
+    DB.history.slice(0,8).map(h=>`<div class="kv"><span>${h.d} · ${h.day.split(' — ')[0]}</span>
+      <b>${h.setsDone}/${h.setsTotal} sets · ${h.volume} kg</b></div>`).join('')+
+    `<button class="danger sm" style="margin-top:8px" onclick="if(confirm('Clear all session history?')){DB.history=[];save();renderTrain();}">Clear history</button></div>`;
+}
+
+/* ============================================================
+   STATS / PHASE ENGINE
+   ============================================================ */
+function bfNavy(){
+  const s=DB.stats;if(!s.ht||!s.waist||!s.neck)return null;
+  const ht=+s.ht;
+  if(s.sex==='m'){
+    if(+s.waist<=+s.neck)return null;
+    return Math.round((495/(1.0324-0.19077*Math.log10(s.waist-s.neck)+0.15456*Math.log10(ht))-450)*10)/10;
+  }else{
+    if(!s.hip)return null;
+    return Math.round((495/(1.29579-0.35004*Math.log10(+s.waist+ +s.hip-+s.neck)+0.22100*Math.log10(ht))-450)*10)/10;
+  }
+}
+function bmr(){const s=DB.stats;if(!s.wt||!s.ht||!s.age)return null;
+  return Math.round(10*s.wt+6.25*s.ht-5*s.age+(s.sex==='m'?5:-161));}
+function tdee(){const b=bmr();return b?Math.round(b*(+DB.stats.act||1.465)):null;}
+
+function trend(){ // kg/week over last ~14-28d
+  const w=DB.weights.slice(-8);if(w.length<2)return null;
+  const a=w[0],b=w[w.length-1];const dd=daysBetween(a.d,b.d);if(dd<3)return null;
+  return Math.round(((b.w-a.w)/dd*7)*100)/100;
+}
+function decidePhase(){
+  const s=DB.stats; if(!s.wt) return {label:"Add your stats",cls:"",txt:"Fill the Stats tab so I can pick cut / lean-bulk / maintain."};
+  const bf=bfNavy(), t=tdee(), tr=trend();
+  const male=s.sex==='m';
+  // thresholds (visible-abs lean look targets)
+  const cutAbove = male?16:24, bulkBelow = male?11:19;
+  let phase, cal, why=[];
+  if(bf==null){
+    // fall back to goal pref
+    phase = s.goal==='lean'?'Cut': s.goal==='size'?'Lean bulk':'Recomp / maintain';
+    why.push("No BF% yet (add tape measurements) — using your goal preference.");
+  } else if(bf>=cutAbove){ phase='Cut'; why.push(`Est. BF ~${bf}% is above the lean-look zone (~${bulkBelow}–${cutAbove}%). Strip fat first — bulking now just adds fat.`);}
+  else if(bf<=bulkBelow){ phase='Lean bulk'; why.push(`Est. BF ~${bf}% is lean — you have room to add muscle slowly.`);}
+  else { phase='Recomp / maintain'; why.push(`Est. BF ~${bf}% is in the lean-look zone — hold here and recomp, or pick a short mini-cut/bulk.`);}
+
+  if(t){
+    if(phase==='Cut') cal=Math.round(t-450);
+    else if(phase==='Lean bulk') cal=Math.round(t+200);
+    else cal=t;
+  }
+  // trend sanity warnings
+  let warn=null;
+  if(tr!=null){
+    const pctWk = tr/s.wt*100;
+    if(phase==='Cut'){
+      if(tr>=0) warn="⚠ You're cutting but weight isn't dropping — tighten intake ~150–200 kcal or add steps.";
+      else if(pctWk< -1.0) warn="⚠ Losing >1%/wk — too fast, you'll shed muscle. Eat ~150 kcal more.";
+    }
+    if(phase==='Lean bulk'){
+      if(pctWk>0.5) warn="⚠ Gaining >0.5%/wk — that's fat-gain territory. Trim the surplus ~150 kcal.";
+      else if(tr<=0) warn="⚠ Not gaining — nudge intake up ~150 kcal to actually build.";
+    }
+  }
+  return {label:phase,bf,cal,tdee:t,why,warn,tr};
+}
+
+function renderHome(){
+  const p=decidePhase();
+  const cls=p.label==='Cut'?'warnbox':p.label==='Lean bulk'?'goodbox':'goodbox';
+  let html=`<div class="card"><h3>Current phase</h3><div class="big">${p.label}</div>`;
+  if(p.cal)html+=`<div class="muted">Target ≈ <b style="color:var(--txt)">${p.cal} kcal/day</b>${p.tdee?` · maintenance ~${p.tdee}`:''}</div>`;
+  if(p.why)p.why.forEach(w=>html+=`<div class="note">${w}</div>`);
+  if(p.warn)html+=`<div class="warnbox">${p.warn}</div>`;
+  if(p.tr!=null)html+=`<div class="muted" style="font-size:12.5px">Recent trend: ${p.tr>0?'+':''}${p.tr} kg/week</div>`;
+  html+=`</div>`;
+  document.getElementById('phaseBox').innerHTML=html;
+
+  // today plan
+  const slot=todaysSlot();
+  document.getElementById('todayPlan').innerHTML = slot<0
+    ? `<div class="big" style="font-size:22px">Rest day 🧘</div><div class="muted">Light cardio / 8–10k steps / mobility. Keep protein high.</div>`
+    : `<div class="big" style="font-size:22px">${PROGRAM[WEEK[slot][0]].name}</div><div class="muted">Tap <b>Train</b> to log it. ${PROGRAM[WEEK[slot][0]].ex.length} exercises.</div>`;
+
+  // snapshot
+  const s=DB.stats;
+  if(s.wt){
+    document.getElementById('snapshot').innerHTML=`
+     <div class="kv"><span>Weight</span><b>${s.wt} kg</b></div>
+     <div class="kv"><span>Est. body fat</span><b>${p.bf!=null?p.bf+'%':'add tape →'}</b></div>
+     <div class="kv"><span>Maintenance (TDEE)</span><b>${p.tdee||'—'} kcal</b></div>
+     <div class="kv"><span>Protein target</span><b>${proteinTarget()} g</b></div>`;
+  }
+}
+
+function proteinTarget(){const s=DB.stats;if(!s.wt)return '—';
+  return Math.round((s.goal==='lean'?2.2:2.0)*s.wt);}
+
+document.getElementById('s_sex').addEventListener('change',e=>{
+  document.getElementById('hipWrap').classList.toggle('hide',e.target.value!=='f');
+});
+
+function loadStatsForm(){const s=DB.stats;
+  ['sex','age','ht','wt','act','goal','waist','neck','hip'].forEach(k=>{
+    const el=document.getElementById('s_'+k); if(el&&s[k]!=null&&s[k]!=='')el.value=s[k];
+  });
+  document.getElementById('hipWrap').classList.toggle('hide',(s.sex||'m')!=='f');
+}
+function saveStats(){
+  const g=id=>document.getElementById(id).value;
+  Object.assign(DB.stats,{sex:g('s_sex'),age:g('s_age'),ht:g('s_ht'),wt:g('s_wt'),
+    act:g('s_act'),goal:g('s_goal'),waist:g('s_waist'),neck:g('s_neck'),hip:g('s_hip')});
+  if(DB.stats.wt){
+    const t=today();const last=DB.weights[DB.weights.length-1];
+    if(last&&last.d===t)last.w=+DB.stats.wt;
+    else DB.weights.push({d:t,w:+DB.stats.wt});
+  }
+  save();renderStats();
+  document.getElementById('statsOut').innerHTML=`<div class="goodbox">Saved. Phase recommendation updated on the Home tab.</div>`;
+}
+function renderStats(){
+  loadStatsForm();
+  drawWeightChart();
+  const tr=trend();
+  document.getElementById('wtTrend').innerHTML = tr==null?'Log weight a few more days for a trend.'
+    :`Trend: <b style="color:var(--txt)">${tr>0?'+':''}${tr} kg/week</b>`;
+  const rows=DB.weights.slice(-12).reverse();
+  document.getElementById('wtTable').innerHTML=
+    `<tr><th>Date</th><th>Weight</th><th></th></tr>`+
+    (rows.length?rows.map((w,i)=>`<tr><td>${w.d}</td><td>${w.w} kg</td>
+      <td style="text-align:right"><button class="danger sm" onclick="delW('${w.d}')">✕</button></td></tr>`).join('')
+     :`<tr><td colspan=3 class="muted">No entries yet.</td></tr>`);
+}
+function delW(d){DB.weights=DB.weights.filter(w=>w.d!==d);save();renderStats();}
+function drawWeightChart(){
+  const c=document.getElementById('wtChart');if(!c)return;const ctx=c.getContext&&c.getContext('2d');if(!ctx)return;
+  const W=c.width,H=c.height;ctx.clearRect(0,0,W,H);
+  const data=DB.weights.slice(-30);if(data.length<2){ctx.fillStyle='#9a9aa8';ctx.font='13px sans-serif';ctx.fillText('Log weight on 2+ days to see your curve.',12,H/2);return;}
+  const ws=data.map(d=>d.w),min=Math.min(...ws)-0.5,max=Math.max(...ws)+0.5;
+  const x=i=>20+i*(W-40)/(data.length-1), y=v=>H-20-(v-min)/(max-min)*(H-40);
+  ctx.strokeStyle='#2a2a36';ctx.beginPath();ctx.moveTo(20,H-20);ctx.lineTo(W-20,H-20);ctx.stroke();
+  ctx.strokeStyle='#6c8cff';ctx.lineWidth=2;ctx.beginPath();
+  data.forEach((d,i)=>{i?ctx.lineTo(x(i),y(d.w)):ctx.moveTo(x(i),y(d.w))});ctx.stroke();
+  ctx.fillStyle='#46d6a8';data.forEach((d,i)=>{ctx.beginPath();ctx.arc(x(i),y(d.w),3,0,7);ctx.fill()});
+  ctx.fillStyle='#9a9aa8';ctx.font='11px sans-serif';
+  ctx.fillText(max.toFixed(1),2,14);ctx.fillText(min.toFixed(1),2,H-24);
+}
+function exportData(){
+  const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='leanshape-backup-'+today()+'.json';a.click();
+}
+
+/* ============================================================
+   DIET — IBS-friendly vegetarian (low-FODMAP leaning)
+   ============================================================ */
+const FOODBANK={
+ "Protein (IBS-safe veg)":[
+   ["Whey isolate+concentrate blend","1 scoop / 30 g","120 kcal · 24P · 3C · 2F · your blend; isolate-led = mostly low lactose, take with food if bloaty"],
+   ["Eggs","2 whole / 3 whites+1","140 kcal · 12P · 1C · 10F · totally IBS-safe, zero FODMAP"],
+   ["Paneer","100 g","265 kcal · 18P · 3C · 21F · low-FODMAP, no lactose issue"],
+   ["Firm tofu","150 g","170 kcal · 18P · 3C · 10F · firm only (water-extracted = low FODMAP)"],
+   ["Greek/strained curd (lactose-free)","150 g","130 kcal · 15P · 8C · 4F"],
+   ["Soy chunks/curls (rinsed well)","30 g dry","100 kcal · 15P · 7C · 1F · soak & rinse to cut FODMAPs"],
+ ],
+ "Carbs (low-FODMAP)":[
+   ["White rice","1 cup ckd","205 kcal · 4P · 45C · 0F · gentlest grain for IBS"],
+   ["Potato / sweet potato","150 g","130 kcal · 3P · 30C · 0F · sweet potato cap 75g/serve"],
+   ["Oats","40 g dry","150 kcal · 5P · 27C · 3F · ≤45g serve, low-FODMAP amount"],
+   ["Quinoa","1 cup ckd","220 kcal · 8P · 39C · 4F"],
+   ["Rice noodles / poha","80 g dry","290 kcal · 6P · 64C · 1F"],
+   ["Sourdough / spelt bread","2 sl","180 kcal · 6P · 34C · 2F · easier than regular wheat"],
+ ],
+ "Veg & fruit (low-FODMAP)":[
+   ["Spinach, carrot, zucchini, bell pepper","1 cup","~40 kcal · fiber without the gas"],
+   ["Cucumber, tomato, lettuce, bok choy","1 cup","~25 kcal · safe salad base"],
+   ["Green beans, eggplant, potato","1 cup","~60 kcal"],
+   ["Banana (firm), strawberry, blueberry","1 serve","~90 kcal · ripe banana cap 1/3"],
+   ["Kiwi, orange, grapes, pineapple","1 serve","~70 kcal"],
+ ],
+ "Fats":[
+   ["Peanut butter","1 tbsp","95 kcal · 4P · 3C · 8F · ≤2 tbsp/serve"],
+   ["Olive oil / ghee","1 tbsp","110 kcal · pure fat, no FODMAP"],
+   ["Walnuts / macadamia","20 g","130 kcal · pecans/walnuts low-FODMAP"],
+   ["Chia / flax (soaked)","1 tbsp","60 kcal · ≤1 tbsp to avoid bloat"],
+   ["Pumpkin seeds","2 tbsp","90 kcal · low-FODMAP"],
+ ],
+};
+function dayPlan(){
+  // build from calorie + protein targets
+  const cal=decidePhase().cal||2100;
+  const prot=proteinTarget()==='—'?130:proteinTarget();
+  return {cal,prot,meals:[
+   ["Breakfast",
+     [["Eggs (2 whole + 2 whites)","~150 g"],["Oats","40 g dry"],["Banana (firm)","100 g / 1 small"],["Peanut butter","15 g / 1 tbsp"]],
+     "~480 kcal · 30P · 46C · 18F · eggs cooked in a little olive oil/ghee"],
+   ["Mid-morning",
+     [["Lactose-free curd / Greek yoghurt","150 g"],["Walnuts","20 g"],["Blueberries","80 g"]],
+     "~270 kcal · 17P · 14C · 16F"],
+   ["Lunch",
+     [["White rice (raw → ~1 cup cooked)","75 g dry"],["Paneer OR firm tofu","120 g"],["Zucchini + carrot + spinach","150 g total"],["Garlic-infused oil","10 g / 2 tsp"]],
+     "~600 kcal · 35P · 60C · 22F · no onion/garlic solids — use infused oil, ginger"],
+   ["Pre / Post workout",
+     [["Whey blend","1 scoop / 30 g"],["Banana or rice cakes","100 g / 30 g"]],
+     "~210 kcal · 26P · 25C · 2F"],
+   ["Dinner",
+     [["Firm tofu OR paneer","130 g"],["Quinoa (raw) OR potato","60 g dry / 200 g"],["Bell pepper + green beans","150 g total"],["Olive oil","10 g / 2 tsp"]],
+     "~520 kcal · 32P · 45C · 20F"],
+   ["Optional snack",
+     [["Lactose-free curd OR extra whey","150 g / 1 scoop"]],
+     "~150 kcal · 25P"],
+  ]};
+}
+function renderDiet(){dietView(DIETV);}
+let DIETV='plan';
+function dietView(v){
+  DIETV=v;
+  ['plan','bank','rules'].forEach(x=>document.getElementById('dseg-'+x).classList.toggle('on',x===v));
+  const p=decidePhase();
+  document.getElementById('dietTargets').innerHTML=`<div class="card tight">
+    <div class="row" style="text-align:center">
+      <div><div class="muted" style="font-size:11px">PHASE</div><b>${p.label}</b></div>
+      <div><div class="muted" style="font-size:11px">CALORIES</div><b>${p.cal||'—'}</b></div>
+      <div><div class="muted" style="font-size:11px">PROTEIN</div><b>${proteinTarget()} g</b></div>
+    </div></div>`;
+  const body=document.getElementById('dietBody');
+  if(v==='plan'){
+    const d=dayPlan();
+    body.innerHTML=`<div class="note">Sample IBS-friendly vegetarian day with <b>raw / dry weights</b>, auto-scaled toward your <b>${d.cal} kcal</b> / <b>${d.prot}g protein</b> target. Swap any meal using the Food bank. No dal / chhole / rajma / large onion+garlic — whey & paneer carry the protein.</div>`+
+      d.meals.map(m=>`<div class="meal"><div class="h"><span>${m[0]}</span></div>
+        <div style="margin:6px 0 4px">${m[1].map(it=>`<div class="kv" style="padding:5px 0"><span>${it[0]}</span><b>${it[1]}</b></div>`).join('')}</div>
+        <div class="mac">${m[2]}</div></div>`).join('')+
+      `<div class="goodbox">Tip: hit protein with whey + paneer/tofu/curd first — it's the lever for lean muscle. Beans/lentils are the usual veg protein but they're the worst IBS triggers, so we lean on dairy & soy + whey instead. Add a daily probiotic + peppermint tea if bloated.</div>`;
+  } else if(v==='bank'){
+    body.innerHTML=Object.entries(FOODBANK).map(([cat,items])=>`
+      <h3 style="margin:14px 2px 8px">${cat}</h3>
+      <div class="foodgrid">${items.map(f=>`<div class="food"><div class="fn">${f[0]}</div>
+        <div class="fm">${f[1]}</div><div class="fm">${f[2]}</div></div>`).join('')}</div>`).join('');
+  } else {
+    body.innerHTML=`
+    <div class="card"><h3>IBS + lean-veg ground rules</h3>
+     <div class="kv"><span>Limit / avoid</span><b class="muted" style="text-align:right">dal, chana/chhole, rajma, soybeans whole, onion, garlic, wheat in bulk, cauliflower, cashew, milk (lactose)</b></div>
+     <div class="kv"><span>Protein you CAN lean on</span><b class="muted" style="text-align:right">eggs, whey isolate+concentrate blend, paneer, firm tofu, lactose-free curd, rinsed soy chunks</b></div>
+     <div class="kv"><span>Garlic/onion flavour</span><b class="muted" style="text-align:right">garlic-INFUSED oil, ginger, spring-onion greens, herbs</b></div>
+     <div class="kv"><span>Portion FODMAPs</span><b class="muted" style="text-align:right">oats ≤45g, sweet potato ≤75g, PB ≤2 tbsp, banana firm</b></div>
+    </div>
+    <div class="note">Low-FODMAP is a <b>tool, not forever</b>. Once symptoms settle, reintroduce one food at a time to learn your personal triggers. If IBS is severe or new, check with a doctor/dietitian — this app isn't medical advice.</div>
+    <div class="note">High protein on a veg + IBS setup is the hard part. Eggs + your whey isolate+concentrate blend are the easy levers (the isolate share keeps lactose low — take with food if the concentrate ever bloats you). Aim ${proteinTarget()}g/day spread over 4–5 feedings.</div>`;
+  }
+}
+
+/* ---------------- boot ---------------- */
+renderHome();
+</script>
+</body>
+</html>
