@@ -1,5 +1,5 @@
 /* LeanShape service worker — offline-first app shell */
-const CACHE = 'leanshape-v2';
+const CACHE = 'leanshape-v3';
 const ASSETS = [
   './',
   './index.html',

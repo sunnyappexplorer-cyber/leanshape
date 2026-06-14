@@ -66,14 +66,20 @@ button.danger{background:transparent;border:1px solid var(--bad);color:var(--bad
 .tabbar button .ic{font-size:19px}
 .tabbar button.on{color:var(--accent)}
 .hide{display:none}
-#restBar{position:fixed;left:0;right:0;z-index:200;
-  bottom:calc(58px + env(safe-area-inset-bottom));
-  display:flex;align-items:center;gap:8px;padding:10px 14px;
-  max-width:680px;margin:0 auto;
-  background:rgba(28,28,38,.98);backdrop-filter:blur(10px);
-  border-top:1px solid var(--line);box-shadow:0 -6px 18px rgba(0,0,0,.45)}
+#restBar{position:fixed;left:10px;right:10px;z-index:300;
+  bottom:calc(72px + env(safe-area-inset-bottom));
+  padding:12px 14px 14px;
+  background:#1c1c26;border:1px solid var(--line);border-radius:16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.6)}
 #restBar.hide{display:none}
-#restBar button{flex:0 0 auto}
+#restBar .rt-top{display:flex;align-items:baseline;justify-content:space-between}
+#restBar #restTime{font-size:34px;font-weight:800;letter-spacing:-.02em}
+#restBar .rt-btns{display:flex;gap:10px}
+#restBar .rt-btns button{flex:1;padding:14px;font-size:16px;touch-action:manipulation}
+#restBar #restStop{background:var(--bad)}
+#restBar.done{border-color:var(--good)}
+#restBar.done #restTime,#restBar.done #restLabel{color:var(--good)}
+#restBar.done #restStop{background:var(--good)}
 .ex{border:1px solid var(--line);border-radius:12px;margin:0 0 10px;overflow:hidden;background:var(--panel)}
 .ex .top{display:flex;align-items:center;gap:10px;padding:11px 12px;cursor:pointer}
 .ex .top .nm{font-weight:700}
@@ -206,11 +212,15 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;padding:4px 0}
 
 <!-- ============ REST TIMER (floating) ============ -->
 <div id="restBar" class="hide">
-  <span class="muted" style="font-size:12px">Rest</span>
-  <b id="restTime" style="font-size:22px;min-width:58px">1:30</b>
-  <div class="bar" style="flex:1;min-width:40px"><i id="restFill" style="width:100%"></i></div>
-  <button class="ghost sm" onclick="addRest(15)">+15s</button>
-  <button class="sm" onclick="stopRest()">Stop</button>
+  <div class="rt-top">
+    <span id="restLabel" class="muted" style="font-size:13px">Rest timer</span>
+    <b id="restTime">1:30</b>
+  </div>
+  <div class="bar" style="margin:8px 0 10px"><i id="restFill" style="width:100%"></i></div>
+  <div class="rt-btns">
+    <button class="ghost" onclick="addRest(15)">+15s</button>
+    <button id="restStop" onclick="stopRest()">Stop</button>
+  </div>
 </div>
 
 <!-- ============ NAV ============ -->
@@ -412,12 +422,27 @@ function resetRot(id){DB.rotation[id]=today();save();renderTrain();}
 /* ----- rest timer ----- */
 let restInt=null,restLeft=0,restTotal=0;
 function fmt(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
-function startRest(sec){restTotal=restLeft=sec;document.getElementById('restBar').classList.remove('hide');tickRest();
-  clearInterval(restInt);restInt=setInterval(()=>{restLeft--;tickRest();
-    if(restLeft<=0){stopRest();try{navigator.vibrate&&navigator.vibrate([200,80,200]);}catch(e){}beep();}},1000);}
+function startRest(sec){restTotal=restLeft=sec;
+  const bar=document.getElementById('restBar');bar.classList.remove('hide','done');
+  document.getElementById('restLabel').textContent='Rest timer';
+  document.getElementById('restStop').textContent='Stop';
+  tickRest();
+  clearInterval(restInt);restInt=setInterval(()=>{restLeft--;tickRest();if(restLeft<=0)restDone();},1000);}
 function tickRest(){document.getElementById('restTime').textContent=fmt(Math.max(0,restLeft));
   document.getElementById('restFill').style.width=Math.max(0,restLeft/restTotal*100)+'%';}
-function addRest(s){restLeft+=s;restTotal=Math.max(restTotal,restLeft);tickRest();}
+function addRest(s){if(restLeft<0)restLeft=0;restLeft+=s;restTotal=Math.max(restTotal,restLeft);
+  document.getElementById('restBar').classList.remove('done');
+  document.getElementById('restLabel').textContent='Rest timer';
+  document.getElementById('restStop').textContent='Stop';
+  clearInterval(restInt);restInt=setInterval(()=>{restLeft--;tickRest();if(restLeft<=0)restDone();},1000);
+  tickRest();}
+function restDone(){clearInterval(restInt);restLeft=0;
+  const bar=document.getElementById('restBar');bar.classList.add('done');
+  document.getElementById('restTime').textContent='0:00';
+  document.getElementById('restLabel').textContent='Rest done ✓ — next set!';
+  document.getElementById('restStop').textContent='Done';
+  document.getElementById('restFill').style.width='0%';
+  try{navigator.vibrate&&navigator.vibrate([200,80,200]);}catch(e){}beep();}
 function stopRest(){clearInterval(restInt);document.getElementById('restBar').classList.add('hide');}
 function beep(){try{const a=new(window.AudioContext||window.webkitAudioContext)();const o=a.createOscillator();
   o.connect(a.destination);o.frequency.value=880;o.start();setTimeout(()=>{o.stop();a.close();},220);}catch(e){}}
