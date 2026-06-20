@@ -181,8 +181,14 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;padding:4px 0}
   </div>
 
   <div class="card">
-    <h2>Weight log</h2>
-    <canvas id="wtChart" width="640" height="150"></canvas>
+    <h2>Daily weight log</h2>
+    <div class="muted" style="font-size:12.5px;margin-bottom:8px">Weigh yourself first thing in the morning. Log it daily — the trend drives the cut/lean-bulk advice on Home.</div>
+    <div class="row" style="align-items:flex-end">
+      <div><label>Date</label><input id="w_date" type="date"></div>
+      <div><label>Weight (kg)</label><input id="w_val" type="number" inputmode="decimal" placeholder="68"></div>
+      <div style="flex:0 0 auto"><button onclick="addWeight()">Add</button></div>
+    </div>
+    <canvas id="wtChart" width="640" height="150" style="margin-top:12px"></canvas>
     <div id="wtTrend" class="muted" style="margin:8px 0"></div>
     <table id="wtTable"></table>
   </div>
@@ -210,6 +216,12 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;padding:4px 0}
   <div id="dietBody"></div>
 </section>
 
+<!-- ============ PROGRESS ============ -->
+<section id="t-progress" class="wrap hide">
+  <div id="progSessions"></div>
+  <div id="progLifts"></div>
+</section>
+
 <!-- ============ REST TIMER (floating) ============ -->
 <div id="restBar" class="hide">
   <div class="rt-top">
@@ -228,6 +240,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;padding:4px 0}
   <button data-tab="home" class="on" onclick="tab('home')"><span class="ic">◎</span>Home</button>
   <button data-tab="stats" onclick="tab('stats')"><span class="ic">📊</span>Stats</button>
   <button data-tab="train" onclick="tab('train')"><span class="ic">🏋️</span>Train</button>
+  <button data-tab="progress" onclick="tab('progress')"><span class="ic">📈</span>Progress</button>
   <button data-tab="diet" onclick="tab('diet')"><span class="ic">🥗</span>Diet</button>
 </nav>
 
@@ -242,18 +255,21 @@ DB.weights=DB.weights||[];      // [{d:'2026-06-14',w:68}]
 DB.rotation=DB.rotation||{};    // {exId: startDateISO}
 DB.logs=DB.logs||{};            // {exId:{sets:[{w,r}]}}
 DB.history=DB.history||[];       // [{d,t,day,setsDone,setsTotal,volume}]
+DB.variant=DB.variant||{};       // {exId: chosen exercise name (overrides default)}
+DB.exHist=DB.exHist||{};         // {exId: [{d,name,w,r}]} top set per finished session
 const today=()=>new Date().toISOString().slice(0,10);
 const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
 
 /* ---------------- tabs ---------------- */
 function tab(name){
-  ['home','stats','train','diet'].forEach(n=>{
+  ['home','stats','train','progress','diet'].forEach(n=>{
     document.getElementById('t-'+n).classList.toggle('hide',n!==name);
     document.querySelector('.tabbar button[data-tab="'+n+'"]').classList.toggle('on',n===name);
   });
   if(name==='home')renderHome();
   if(name==='stats')renderStats();
   if(name==='train')renderTrain();
+  if(name==='progress')renderProgress();
   if(name==='diet')renderDiet();
   window.scrollTo(0,0);
 }
@@ -374,6 +390,8 @@ function renderTrain(){
     const n=setCount(ex.sets), repTarget=ex.sets.split('×')[1]?.trim()||'';
     const log=DB.logs[ex.id]||{};const sets=log.sets||[];
     const done=sets.filter(s=>s&&s.w).length;
+    const nm=DB.variant[ex.id]||ex.name;
+    const opts=[ex.name,...ex.alts].filter((v,i,a)=>a.indexOf(v)===i);
     let rows='';
     for(let i=0;i<n;i++){const s=sets[i]||{};
       rows+=`<div class="set"><span class="lab">Set ${i+1}</span>
@@ -383,14 +401,14 @@ function renderTrain(){
     return `<div class="ex">
       <div class="top" onclick="this.parentNode.querySelector('.body').classList.toggle('hide')">
         <div style="flex:1">
-          <div class="nm">${ex.name}</div>
+          <div class="nm">${nm}${nm!==ex.name?' <span class="badge b-fresh">swapped</span>':''}</div>
           <div class="meta">${ex.sets}${done?` · ${done}/${n} logged`:''} · tap to log ▾</div>
         </div>
         <span class="badge ${r.due?'b-rotate':'b-fresh'}">${r.due?'rotate':r.weeks+'w'}</span>
       </div>
       <div class="body hide">
         <div class="note">${ex.cue}</div>
-        ${r.due?`<div class="warnbox">On this variation ${r.weeks} weeks — time to rotate. Pick an alternative below, then tap “Reset rotation”.</div>`:''}
+        ${r.due?`<div class="warnbox">On this variation ${r.weeks} weeks — time to rotate. Pick a different option below to make it your new default.</div>`:''}
         <h3 style="margin-top:4px">Log your sets — target ${ex.sets}</h3>
         ${rows}
         <div style="display:flex;gap:6px;margin:6px 0 2px">
@@ -398,9 +416,12 @@ function renderTrain(){
           <button class="ghost sm" onclick="startRest(90)">90s</button>
           <button class="ghost sm" onclick="startRest(120)">2 min</button>
         </div>
-        <h3 style="margin-top:10px">Swap / rotate to</h3>
-        ${ex.alts.map(a=>`<div class="alt">↻ ${a}</div>`).join('')}
-        <button class="ghost sm" style="margin-top:8px" onclick="resetRot('${ex.id}')">Reset rotation (started new variation)</button>
+        <h3 style="margin-top:10px">Choose variation — tap “Use” to make it your default</h3>
+        ${opts.map((a,oi)=>`<div class="alt" style="display:flex;align-items:center;gap:8px">
+          <span style="flex:1">${a===nm?'✓ ':'↻ '}${a}${oi===0?' <span class="muted">(original)</span>':''}</span>
+          ${a===nm?'<span class="badge b-fresh">current</span>':`<button class="ghost sm" onclick="setVariant('${ex.id}',${oi})">Use</button>`}
+        </div>`).join('')}
+        <button class="ghost sm" style="margin-top:8px" onclick="resetRot('${ex.id}')">Same exercise, just reset the 6-week clock</button>
       </div>
     </div>`;
   }).join('');
@@ -418,6 +439,15 @@ function setCount(s){const m=s.match(/(\d+)\s*×/);return m?+m[1]:3;}
 function logSet(id,i,k,v){DB.logs[id]=DB.logs[id]||{};DB.logs[id].sets=DB.logs[id].sets||[];
   DB.logs[id].sets[i]=DB.logs[id].sets[i]||{};DB.logs[id].sets[i][k]=v;save();}
 function resetRot(id){DB.rotation[id]=today();save();renderTrain();}
+function exById(id){for(const k in PROGRAM){const e=PROGRAM[k].ex.find(x=>x.id===id);if(e)return e;}return null;}
+function setVariant(id,idx){
+  const ex=exById(id);if(!ex)return;
+  const opts=[ex.name,...ex.alts].filter((v,i,a)=>a.indexOf(v)===i);
+  if(idx===0)delete DB.variant[id];else DB.variant[id]=opts[idx];
+  DB.rotation[id]=today();            // fresh rotation clock for the new variation
+  if(DB.logs[id])DB.logs[id].sets=[]; // start logging fresh for the new movement
+  save();renderTrain();
+}
 
 /* ----- rest timer ----- */
 let restInt=null,restLeft=0,restTotal=0;
@@ -450,13 +480,56 @@ function beep(){try{const a=new(window.AudioContext||window.webkitAudioContext)(
 /* ----- finish workout + history ----- */
 function finishWorkout(key){
   const day=PROGRAM[key];let total=0,vol=0,done=0;
-  day.ex.forEach(ex=>{const s=(DB.logs[ex.id]||{}).sets||[];s.forEach(x=>{if(x&&x.w){done++;vol+=(+x.w||0)*(+x.r||0);}});total+=setCount(ex.sets);});
+  day.ex.forEach(ex=>{
+    const s=(DB.logs[ex.id]||{}).sets||[];
+    let top=null;
+    s.forEach(x=>{if(x&&x.w){done++;vol+=(+x.w||0)*(+x.r||0);
+      if(!top||(+x.w)>(+top.w))top={w:+x.w,r:+x.r||0};}});
+    total+=setCount(ex.sets);
+    if(top){ // record this session's top set for progress tracking
+      DB.exHist[ex.id]=DB.exHist[ex.id]||[];
+      DB.exHist[ex.id]=DB.exHist[ex.id].filter(e=>e.d!==today());
+      DB.exHist[ex.id].push({d:today(),name:DB.variant[ex.id]||ex.name,w:top.w,r:top.r});
+    }
+  });
   DB.history.unshift({d:today(),t:new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}),
     day:day.name,setsDone:done,setsTotal:total,volume:Math.round(vol)});
   // clear today's set logs so next session starts fresh, keep last-weight memory
   day.ex.forEach(ex=>{if(DB.logs[ex.id])DB.logs[ex.id].sets=[];});
   save();stopRest();renderTrain();
   alert('Workout saved ✓  '+done+'/'+total+' sets · '+Math.round(vol)+' kg total volume');
+}
+function sparkline(h){
+  if(h.length<2)return '';
+  const ws=h.slice(-12).map(e=>e.w);const min=Math.min(...ws),max=Math.max(...ws);
+  const b='▁▂▃▄▅▆▇█';
+  return '· '+ws.map(w=>b[max===min?3:Math.round((w-min)/(max-min)*7)]).join('');
+}
+function renderProgress(){
+  const sess=DB.history;
+  let sHTML=`<div class="card"><h2>Workout sessions</h2>
+    <div class="muted" style="font-size:12.5px;margin-bottom:6px">Each row is a finished session — sets completed and total volume (weight × reps). Rising volume over time = you're progressing.</div>`;
+  sHTML+= sess.length
+    ? sess.slice(0,15).map(h=>`<div class="kv"><span>${h.d} · ${h.day.split(' — ')[0]}</span><b>${h.setsDone}/${h.setsTotal} sets · ${h.volume} kg</b></div>`).join('')
+    : `<div class="muted">No sessions yet. On the <b>Train</b> tab, log your sets and tap <b>✓ Finish workout</b> — it'll show up here.</div>`;
+  sHTML+=`</div>`;
+  document.getElementById('progSessions').innerHTML=sHTML;
+
+  let lHTML='';
+  for(const k in PROGRAM){
+    const rows=PROGRAM[k].ex.filter(ex=>(DB.exHist[ex.id]||[]).length).map(ex=>{
+      const h=DB.exHist[ex.id];const last=h[h.length-1];const prev=h.length>1?h[h.length-2]:null;
+      const best=h.reduce((m,e)=>e.w>m.w?e:m,h[0]);
+      const arrow=prev?(last.w>prev.w?'<span style="color:var(--good)">▲ up</span>':last.w<prev.w?'<span style="color:var(--bad)">▼ down</span>':'<span class="muted">— same</span>'):'<span class="muted">new</span>';
+      return `<div style="padding:9px 0;border-bottom:1px dashed var(--line)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><b>${last.name}</b><span style="font-size:12px">${arrow}</span></div>
+        <div class="muted" style="font-size:12.5px">Latest <b style="color:var(--txt)">${last.w}kg×${last.r}</b> · Best ${best.w}kg · ${h.length} session${h.length>1?'s':''} <span style="letter-spacing:1px;color:var(--accent)">${sparkline(h)}</span></div>
+      </div>`;
+    }).join('');
+    if(rows)lHTML+=`<div class="card"><h3>${PROGRAM[k].name.split(' — ')[0]}</h3>${rows}</div>`;
+  }
+  document.getElementById('progLifts').innerHTML = lHTML ||
+    `<div class="card"><div class="muted">Per-exercise progress (latest vs best, trend arrows, mini chart) appears here after you finish a workout with logged weights.</div></div>`;
 }
 function historyHTML(){
   if(!DB.history.length)return '';
@@ -580,6 +653,7 @@ function saveStats(){
 }
 function renderStats(){
   loadStatsForm();
+  const wd=document.getElementById('w_date');if(wd&&!wd.value)wd.value=today();
   drawWeightChart();
   const tr=trend();
   document.getElementById('wtTrend').innerHTML = tr==null?'Log weight a few more days for a trend.'
@@ -590,6 +664,17 @@ function renderStats(){
     (rows.length?rows.map((w,i)=>`<tr><td>${w.d}</td><td>${w.w} kg</td>
       <td style="text-align:right"><button class="danger sm" onclick="delW('${w.d}')">✕</button></td></tr>`).join('')
      :`<tr><td colspan=3 class="muted">No entries yet.</td></tr>`);
+}
+function addWeight(){
+  const d=document.getElementById('w_date').value||today();
+  const v=parseFloat(document.getElementById('w_val').value);
+  if(!v){alert('Enter a weight first.');return;}
+  DB.weights=DB.weights.filter(w=>w.d!==d);
+  DB.weights.push({d,w:v});
+  DB.weights.sort((a,b)=>a.d<b.d?-1:1);
+  if(d===today())DB.stats.wt=v;   // keep latest as current
+  document.getElementById('w_val').value='';
+  save();renderStats();
 }
 function delW(d){DB.weights=DB.weights.filter(w=>w.d!==d);save();renderStats();}
 function drawWeightChart(){
