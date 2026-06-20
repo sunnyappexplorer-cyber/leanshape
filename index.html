@@ -556,6 +556,21 @@ function bfNavy(){
 function bmr(){const s=DB.stats;if(!s.wt||!s.ht||!s.age)return null;
   return Math.round(10*s.wt+6.25*s.ht-5*s.age+(s.sex==='m'?5:-161));}
 function tdee(){const b=bmr();return b?Math.round(b*(+DB.stats.act||1.465)):null;}
+function bmiInfo(){const s=DB.stats;if(!s.wt||!s.ht)return null;
+  const b=Math.round((s.wt/((s.ht/100)**2))*10)/10;
+  // Asian-Indian (WHO Asia-Pacific) BMI categories
+  let cat,col;
+  if(b<18.5){cat='Underweight';col='var(--warn)';}
+  else if(b<23){cat='Normal';col='var(--good)';}        // healthy 18.5–22.9
+  else if(b<25){cat='Overweight (Asian ≥23)';col='var(--warn)';}
+  else if(b<30){cat='Obese I';col='var(--bad)';}
+  else{cat='Obese II';col='var(--bad)';}
+  return {bmi:b,cat,col};
+}
+function waistRisk(){const s=DB.stats;if(!s.waist)return null;
+  const limit=s.sex==='m'?90:80;                          // Indian cutoff (vs 102/88 West)
+  return {waist:+s.waist,limit,high:+s.waist>limit};
+}
 
 function trend(){ // kg/week over last ~14-28d
   const w=DB.weights.slice(-8);if(w.length<2)return null;
@@ -566,8 +581,9 @@ function decidePhase(){
   const s=DB.stats; if(!s.wt) return {label:"Add your stats",cls:"",txt:"Fill the Stats tab so I can pick cut / lean-bulk / maintain."};
   const bf=bfNavy(), t=tdee(), tr=trend();
   const male=s.sex==='m';
-  // thresholds (visible-abs lean look targets)
-  const cutAbove = male?16:24, bulkBelow = male?11:19;
+  // South-Asian (Asian-Indian) tuned: BF estimate runs optimistic for Indian bodies
+  // (more visceral fat at same waist), so cut earlier and target leaner.
+  const cutAbove = male?14:22, bulkBelow = male?10:18;
   let phase, cal, why=[];
   if(bf==null){
     // fall back to goal pref
@@ -595,6 +611,9 @@ function decidePhase(){
       else if(tr<=0) warn="⚠ Not gaining — nudge intake up ~150 kcal to actually build.";
     }
   }
+  // South-Asian waist flag (Indian cutoff 90cm M / 80cm F)
+  const wr=waistRisk();
+  if(wr&&wr.high) why.push(`⚠ Waist ${wr.waist} cm is above the Indian healthy limit (${wr.limit} cm for ${male?'men':'women'}). South Asians store more risky visceral fat — trimming the waist matters even if BMI looks fine.`);
   return {label:phase,bf,cal,tdee:t,why,warn,tr};
 }
 
@@ -618,9 +637,12 @@ function renderHome(){
   // snapshot
   const s=DB.stats;
   if(s.wt){
+    const bi=bmiInfo(), wr=waistRisk();
     document.getElementById('snapshot').innerHTML=`
      <div class="kv"><span>Weight</span><b>${s.wt} kg</b></div>
+     ${bi?`<div class="kv"><span>BMI <span class="muted">(Asian-Indian)</span></span><b style="color:${bi.col}">${bi.bmi} · ${bi.cat}</b></div>`:''}
      <div class="kv"><span>Est. body fat</span><b>${p.bf!=null?p.bf+'%':'add tape →'}</b></div>
+     ${wr?`<div class="kv"><span>Waist <span class="muted">(limit ${wr.limit})</span></span><b style="color:${wr.high?'var(--bad)':'var(--good)'}">${wr.waist} cm</b></div>`:''}
      <div class="kv"><span>Maintenance (TDEE)</span><b>${p.tdee||'—'} kcal</b></div>
      <div class="kv"><span>Protein target</span><b>${proteinTarget()} g</b></div>`;
   }
