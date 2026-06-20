@@ -166,8 +166,11 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;padding:4px 0}
         <option value="size">Add visible size</option>
       </select></div>
     </div>
-    <div class="note">Don't know your body-fat %? Fill the 3 tape measurements below and the app estimates it (U.S. Navy method) — good enough to pick cut vs. bulk.</div>
-    <h3 style="margin-top:6px">Tape (optional, for BF% est.)</h3>
+    <div class="row" style="margin-top:4px">
+      <div><label>Measured body fat % <span class="muted">(DEXA / InBody — optional)</span></label><input id="s_bf" type="number" inputmode="decimal" placeholder="e.g. 15.2"></div>
+    </div>
+    <div class="note">Got a real <b>DEXA or InBody</b> scan? Enter it above and the app uses that exact number. Otherwise leave it blank and fill the tape measurements below — the app estimates BF% (U.S. Navy method), good enough to pick cut vs. bulk.</div>
+    <h3 style="margin-top:6px">Tape (used only if no measured BF% above)</h3>
     <div class="row">
       <div><label>Waist @ navel (cm)</label><input id="s_waist" type="number" inputmode="decimal" placeholder="80"></div>
       <div><label>Neck (cm)</label><input id="s_neck" type="number" inputmode="decimal" placeholder="37"></div>
@@ -553,6 +556,12 @@ function bfNavy(){
     return Math.round((495/(1.29579-0.35004*Math.log10(+s.waist+ +s.hip-+s.neck)+0.22100*Math.log10(ht))-450)*10)/10;
   }
 }
+function bfPct(){ // measured DEXA/InBody wins; else Navy tape estimate
+  const m=parseFloat(DB.stats.bf);
+  if(m>0)return {val:Math.round(m*10)/10,src:'measured'};
+  const e=bfNavy();
+  return e!=null?{val:e,src:'estimate'}:null;
+}
 function bmr(){const s=DB.stats;if(!s.wt||!s.ht||!s.age)return null;
   return Math.round(10*s.wt+6.25*s.ht-5*s.age+(s.sex==='m'?5:-161));}
 function tdee(){const b=bmr();return b?Math.round(b*(+DB.stats.act||1.465)):null;}
@@ -579,19 +588,20 @@ function trend(){ // kg/week over last ~14-28d
 }
 function decidePhase(){
   const s=DB.stats; if(!s.wt) return {label:"Add your stats",cls:"",txt:"Fill the Stats tab so I can pick cut / lean-bulk / maintain."};
-  const bf=bfNavy(), t=tdee(), tr=trend();
+  const bfo=bfPct(), bf=bfo?bfo.val:null, t=tdee(), tr=trend();
   const male=s.sex==='m';
-  // South-Asian (Asian-Indian) tuned: BF estimate runs optimistic for Indian bodies
+  // South-Asian (Asian-Indian) tuned: tape BF estimate runs optimistic for Indian bodies
   // (more visceral fat at same waist), so cut earlier and target leaner.
   const cutAbove = male?14:22, bulkBelow = male?10:18;
+  const lab = bfo&&bfo.src==='measured'?'Measured BF':'Est. BF ~';
   let phase, cal, why=[];
   if(bf==null){
     // fall back to goal pref
     phase = s.goal==='lean'?'Cut': s.goal==='size'?'Lean bulk':'Recomp / maintain';
-    why.push("No BF% yet (add tape measurements) — using your goal preference.");
-  } else if(bf>=cutAbove){ phase='Cut'; why.push(`Est. BF ~${bf}% is above the lean-look zone (~${bulkBelow}–${cutAbove}%). Strip fat first — bulking now just adds fat.`);}
-  else if(bf<=bulkBelow){ phase='Lean bulk'; why.push(`Est. BF ~${bf}% is lean — you have room to add muscle slowly.`);}
-  else { phase='Recomp / maintain'; why.push(`Est. BF ~${bf}% is in the lean-look zone — hold here and recomp, or pick a short mini-cut/bulk.`);}
+    why.push("No BF% yet — enter a measured BF% or the tape measurements. Using your goal preference for now.");
+  } else if(bf>=cutAbove){ phase='Cut'; why.push(`${lab}${bf}% is above the lean-look zone (~${bulkBelow}–${cutAbove}%). Strip fat first — bulking now just adds fat.`);}
+  else if(bf<=bulkBelow){ phase='Lean bulk'; why.push(`${lab}${bf}% is lean — you have room to add muscle slowly.`);}
+  else { phase='Recomp / maintain'; why.push(`${lab}${bf}% is in the lean-look zone — hold here and recomp, or pick a short mini-cut/bulk.`);}
 
   if(t){
     if(phase==='Cut') cal=Math.round(t-450);
@@ -614,7 +624,7 @@ function decidePhase(){
   // South-Asian waist flag (Indian cutoff 90cm M / 80cm F)
   const wr=waistRisk();
   if(wr&&wr.high) why.push(`⚠ Waist ${wr.waist} cm is above the Indian healthy limit (${wr.limit} cm for ${male?'men':'women'}). South Asians store more risky visceral fat — trimming the waist matters even if BMI looks fine.`);
-  return {label:phase,bf,cal,tdee:t,why,warn,tr};
+  return {label:phase,bf,bfSrc:bfo?bfo.src:null,cal,tdee:t,why,warn,tr};
 }
 
 function renderHome(){
@@ -641,7 +651,7 @@ function renderHome(){
     document.getElementById('snapshot').innerHTML=`
      <div class="kv"><span>Weight</span><b>${s.wt} kg</b></div>
      ${bi?`<div class="kv"><span>BMI <span class="muted">(Asian-Indian)</span></span><b style="color:${bi.col}">${bi.bmi} · ${bi.cat}</b></div>`:''}
-     <div class="kv"><span>Est. body fat</span><b>${p.bf!=null?p.bf+'%':'add tape →'}</b></div>
+     <div class="kv"><span>Body fat ${p.bfSrc==='measured'?'<span class="muted">(measured)</span>':p.bfSrc==='estimate'?'<span class="muted">(tape est.)</span>':''}</span><b>${p.bf!=null?p.bf+'%':'add BF or tape →'}</b></div>
      ${wr?`<div class="kv"><span>Waist <span class="muted">(limit ${wr.limit})</span></span><b style="color:${wr.high?'var(--bad)':'var(--good)'}">${wr.waist} cm</b></div>`:''}
      <div class="kv"><span>Maintenance (TDEE)</span><b>${p.tdee||'—'} kcal</b></div>
      <div class="kv"><span>Protein target</span><b>${proteinTarget()} g</b></div>`;
@@ -656,7 +666,7 @@ document.getElementById('s_sex').addEventListener('change',e=>{
 });
 
 function loadStatsForm(){const s=DB.stats;
-  ['sex','age','ht','wt','act','goal','waist','neck','hip'].forEach(k=>{
+  ['sex','age','ht','wt','act','goal','waist','neck','hip','bf'].forEach(k=>{
     const el=document.getElementById('s_'+k); if(el&&s[k]!=null&&s[k]!=='')el.value=s[k];
   });
   document.getElementById('hipWrap').classList.toggle('hide',(s.sex||'m')!=='f');
@@ -664,7 +674,7 @@ function loadStatsForm(){const s=DB.stats;
 function saveStats(){
   const g=id=>document.getElementById(id).value;
   Object.assign(DB.stats,{sex:g('s_sex'),age:g('s_age'),ht:g('s_ht'),wt:g('s_wt'),
-    act:g('s_act'),goal:g('s_goal'),waist:g('s_waist'),neck:g('s_neck'),hip:g('s_hip')});
+    act:g('s_act'),goal:g('s_goal'),waist:g('s_waist'),neck:g('s_neck'),hip:g('s_hip'),bf:g('s_bf')});
   if(DB.stats.wt){
     const t=today();const last=DB.weights[DB.weights.length-1];
     if(last&&last.d===t)last.w=+DB.stats.wt;
