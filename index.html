@@ -412,6 +412,8 @@ function renderTrain(){
       <div class="body hide">
         <div class="note">${ex.cue}</div>
         ${r.due?`<div class="warnbox">On this variation ${r.weeks} weeks — time to rotate. Pick a different option below to make it your new default.</div>`:''}
+        ${(()=>{const eh=DB.exHist[ex.id];if(!eh||!eh.length)return '';const lt=eh[eh.length-1];
+          return `<div class="goodbox" style="padding:8px 11px">🎯 Beat last time: <b>${lt.w}kg × ${lt.r}</b> <span class="muted">(${lt.d.slice(5)}) — add a rep or 2.5kg</span></div>`;})()}
         <h3 style="margin-top:4px">Log your sets — target ${ex.sets}</h3>
         ${rows}
         <div style="display:flex;gap:6px;margin:6px 0 2px">
@@ -502,37 +504,65 @@ function finishWorkout(key){
   save();stopRest();renderTrain();
   alert('Workout saved ✓  '+done+'/'+total+' sets · '+Math.round(vol)+' kg total volume');
 }
-function sparkline(h){
-  if(h.length<2)return '';
-  const ws=h.slice(-12).map(e=>e.w);const min=Math.min(...ws),max=Math.max(...ws);
+function e1RM(w,r){return Math.round(w*(1+(+r||0)/30)*10)/10;} // Epley estimated 1-rep max
+function sparkline(vals){
+  if(vals.length<2)return '';
+  const min=Math.min(...vals),max=Math.max(...vals);
   const b='▁▂▃▄▅▆▇█';
-  return '· '+ws.map(w=>b[max===min?3:Math.round((w-min)/(max-min)*7)]).join('');
+  return vals.slice(-12).map(v=>b[max===min?3:Math.round((v-min)/(max-min)*7)]).join('');
+}
+// Assess progressive overload for one lift's history via estimated 1RM trend.
+function overload(h){
+  const e=h.map(x=>e1RM(x.w,x.r));
+  const last=e[e.length-1], bestPrev=e.length>1?Math.max(...e.slice(0,-1)):null;
+  if(e.length<2)return {tag:'baseline',col:'var(--muted)',msg:'First logged — this is your baseline.',e1:last,e};
+  if(last>bestPrev+0.1)return {tag:'progressing ▲',col:'var(--good)',msg:`New best — e1RM ${last}kg (was ${bestPrev}kg). Keep adding reps/weight.`,e1:last,e};
+  // stalled: no e1RM improvement across last 3 sessions
+  const recent=e.slice(-3);
+  const stalled=recent.length>=3 && Math.max(...recent)<=bestPrev+0.1;
+  if(stalled)return {tag:'stalled ⚠',col:'var(--warn)',msg:'No e1RM gain in 3 sessions — add 1 rep per set, or if you hit the top of the range on all sets, add 2.5kg. Or swap the variation.',e1:last,e};
+  return {tag:'holding —',col:'var(--muted)',msg:`Below your best (${bestPrev}kg). Aim to beat it next session.`,e1:last,e};
 }
 function renderProgress(){
-  const sess=DB.history;
-  let sHTML=`<div class="card"><h2>Workout sessions</h2>
-    <div class="muted" style="font-size:12.5px;margin-bottom:6px">Each row is a finished session — sets completed and total volume (weight × reps). Rising volume over time = you're progressing.</div>`;
-  sHTML+= sess.length
-    ? sess.slice(0,15).map(h=>`<div class="kv"><span>${h.d} · ${h.day.split(' — ')[0]}</span><b>${h.setsDone}/${h.setsTotal} sets · ${h.volume} kg</b></div>`).join('')
-    : `<div class="muted">No sessions yet. On the <b>Train</b> tab, log your sets and tap <b>✓ Finish workout</b> — it'll show up here.</div>`;
-  sHTML+=`</div>`;
-  document.getElementById('progSessions').innerHTML=sHTML;
+  // ---- weekly progressive-overload summary ----
+  const wk=[];for(const k in PROGRAM)PROGRAM[k].ex.forEach(ex=>{const h=DB.exHist[ex.id];if(h&&h.length)wk.push(overload(h));});
+  const prog=wk.filter(o=>o.tag.startsWith('progressing')).length;
+  const stall=wk.filter(o=>o.tag.startsWith('stalled')).length;
+  let head=`<div class="card"><h2>Progressive overload</h2>`;
+  if(!wk.length){head+=`<div class="muted">Finish a few workouts (log sets → ✓ Finish workout) and this will grade each lift for you.</div>`;}
+  else{
+    head+=`<div class="row" style="text-align:center;margin-bottom:6px">
+      <div><div class="muted" style="font-size:11px">LIFTS TRACKED</div><b class="big" style="font-size:24px">${wk.length}</b></div>
+      <div><div class="muted" style="font-size:11px">PROGRESSING</div><b class="big" style="font-size:24px;color:var(--good)">${prog}</b></div>
+      <div><div class="muted" style="font-size:11px">STALLED</div><b class="big" style="font-size:24px;color:var(--warn)">${stall}</b></div></div>
+      <div class="note">Overload = your estimated 1-rep-max (weight × (1 + reps/30)) trending up. Each session, beat last time by <b>+1 rep</b> on a set; once every set hits the top of the range, add <b>+2.5 kg</b> and drop back to the bottom of the range.</div>`;
+    if(stall)head+=`<div class="warnbox">${stall} lift${stall>1?'s':''} stalled — see the ⚠ ones below and apply the fix (add reps, add weight, or rotate the exercise).</div>`;
+  }
+  head+=`</div>`;
+  document.getElementById('progSessions').innerHTML=head;
 
+  // ---- per-lift detail ----
   let lHTML='';
   for(const k in PROGRAM){
     const rows=PROGRAM[k].ex.filter(ex=>(DB.exHist[ex.id]||[]).length).map(ex=>{
-      const h=DB.exHist[ex.id];const last=h[h.length-1];const prev=h.length>1?h[h.length-2]:null;
-      const best=h.reduce((m,e)=>e.w>m.w?e:m,h[0]);
-      const arrow=prev?(last.w>prev.w?'<span style="color:var(--good)">▲ up</span>':last.w<prev.w?'<span style="color:var(--bad)">▼ down</span>':'<span class="muted">— same</span>'):'<span class="muted">new</span>';
-      return `<div style="padding:9px 0;border-bottom:1px dashed var(--line)">
-        <div style="display:flex;justify-content:space-between;align-items:baseline"><b>${last.name}</b><span style="font-size:12px">${arrow}</span></div>
-        <div class="muted" style="font-size:12.5px">Latest <b style="color:var(--txt)">${last.w}kg×${last.r}</b> · Best ${best.w}kg · ${h.length} session${h.length>1?'s':''} <span style="letter-spacing:1px;color:var(--accent)">${sparkline(h)}</span></div>
+      const h=DB.exHist[ex.id];const last=h[h.length-1];const o=overload(h);
+      const recent=h.slice(-4).map(x=>`${x.d.slice(5)}: ${x.w}kg×${x.r} <span class="muted">(e1RM ${e1RM(x.w,x.r)})</span>`).join(' · ');
+      return `<div style="padding:10px 0;border-bottom:1px dashed var(--line)">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <b>${last.name}</b><span style="font-size:12px;color:${o.col}">${o.tag}</span></div>
+        <div class="muted" style="font-size:12.5px;margin:2px 0">e1RM ${o.e1}kg <span style="letter-spacing:1px;color:var(--accent)">${sparkline(o.e)}</span></div>
+        <div class="muted" style="font-size:12px">${recent}</div>
+        <div style="font-size:12px;color:${o.col};margin-top:3px">${o.msg}</div>
       </div>`;
     }).join('');
     if(rows)lHTML+=`<div class="card"><h3>${PROGRAM[k].name.split(' — ')[0]}</h3>${rows}</div>`;
   }
-  document.getElementById('progLifts').innerHTML = lHTML ||
-    `<div class="card"><div class="muted">Per-exercise progress (latest vs best, trend arrows, mini chart) appears here after you finish a workout with logged weights.</div></div>`;
+  // ---- session list ----
+  const sess=DB.history;
+  lHTML+=`<div class="card"><h3>Session log</h3>`+
+    (sess.length? sess.slice(0,15).map(s=>`<div class="kv"><span>${s.d} · ${s.day.split(' — ')[0]}</span><b>${s.setsDone}/${s.setsTotal} sets · ${s.volume} kg</b></div>`).join('')
+      : `<div class="muted">No finished sessions yet.</div>`)+`</div>`;
+  document.getElementById('progLifts').innerHTML = lHTML;
 }
 function historyHTML(){
   if(!DB.history.length)return '';
