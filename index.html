@@ -260,6 +260,7 @@ DB.logs=DB.logs||{};            // {exId:{sets:[{w,r}]}}
 DB.history=DB.history||[];       // [{d,t,day,setsDone,setsTotal,volume}]
 DB.variant=DB.variant||{};       // {exId: chosen exercise name (overrides default)}
 DB.exHist=DB.exHist||{};         // {exId: [{d,name,w,r}]} top set per finished session
+DB.varHist=DB.varHist||{};       // {exId:{variantName:lastUsedDate}} for LRU shuffle
 const today=()=>new Date().toISOString().slice(0,10);
 const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
 
@@ -387,7 +388,7 @@ function renderTrain(){
   const seg=document.getElementById('daySeg');
   seg.innerHTML=WEEK.map((d,i)=>`<button class="${i===curDay?'on':''}" onclick="curDay=${i};renderTrain()">${PROGRAM[d[0]].name.split(' — ')[0]}</button>`).join('');
   const key=WEEK[curDay][0], day=PROGRAM[key];
-  document.getElementById('dayHead').innerHTML=`<div class="card tight"><b>${day.name}</b> · <span class="muted">${WEEK[curDay][1]}</span><div class="muted" style="font-size:12.5px;margin-top:4px">Tap an exercise to log sets, see alternatives, and check rotation status.</div></div>`;
+  document.getElementById('dayHead').innerHTML=`<div class="card tight"><b>${day.name}</b> · <span class="muted">${WEEK[curDay][1]}</span><div class="muted" style="font-size:12.5px;margin-top:4px">Tap an exercise to log sets, see alternatives, and check rotation status.</div></div>`+shuffleHTML(key);
   document.getElementById('exList').innerHTML=day.ex.map(ex=>{
     const r=rotState(ex.id);
     const n=setCount(ex.sets), repTarget=ex.sets.split('×')[1]?.trim()||'';
@@ -448,10 +449,62 @@ function exById(id){for(const k in PROGRAM){const e=PROGRAM[k].ex.find(x=>x.id==
 function setVariant(id,idx){
   const ex=exById(id);if(!ex)return;
   const opts=[ex.name,...ex.alts].filter((v,i,a)=>a.indexOf(v)===i);
+  const chosen=idx===0?ex.name:opts[idx];
   if(idx===0)delete DB.variant[id];else DB.variant[id]=opts[idx];
   DB.rotation[id]=today();            // fresh rotation clock for the new variation
   if(DB.logs[id])DB.logs[id].sets=[]; // start logging fresh for the new movement
+  DB.varHist[id]=DB.varHist[id]||{};DB.varHist[id][chosen]=today(); // remember when each variant was last used
   save();renderTrain();
+}
+
+/* ----- Smart Shuffle: learn from your logs, propose swaps ----- */
+// Signals: stalled e1RM (strongest), rotation age >= 6w. Progressing lifts are never touched.
+// Replacement = least-recently-used alternative for that slot.
+function pickLRU(id){
+  const ex=exById(id);if(!ex)return null;
+  const cur=DB.variant[id]||ex.name;
+  const opts=[ex.name,...ex.alts].filter((v,i,a)=>a.indexOf(v)===i&&v!==cur);
+  const used=DB.varHist[id]||{};
+  opts.sort((a,b)=>(used[a]||'0000').localeCompare(used[b]||'0000')); // never/oldest used first
+  return opts[0]||null;
+}
+function smartShuffle(dayKey){
+  const sug=[];
+  PROGRAM[dayKey].ex.forEach(ex=>{
+    const h=DB.exHist[ex.id]||[];
+    const o=h.length?overload(h):null;
+    const r=rotState(ex.id);
+    const cur=DB.variant[ex.id]||ex.name;
+    if(o&&o.tag.startsWith('progressing'))return;              // never shuffle what's working
+    const histIsCurrent=h.length&&h[h.length-1].name===cur;    // old variant's history doesn't count against a fresh swap
+    if(o&&o.tag.startsWith('stalled')&&histIsCurrent){
+      const to=pickLRU(ex.id);
+      if(to)sug.push({id:ex.id,from:cur,to,why:'stalled 3 sessions — a fresh stimulus usually restarts progress'});
+    } else if(r.due){
+      const to=pickLRU(ex.id);
+      if(to)sug.push({id:ex.id,from:cur,to,why:r.weeks+' weeks on this variation — rotate to keep adapting'});
+    }
+  });
+  return sug;
+}
+function applyShuffle(dayKey){
+  const sug=smartShuffle(dayKey);
+  sug.forEach(s=>{
+    const ex=exById(s.id);
+    const opts=[ex.name,...ex.alts].filter((v,i,a)=>a.indexOf(v)===i);
+    setVariant(s.id,opts.indexOf(s.to));
+  });
+  if(sug.length)alert('Shuffled '+sug.length+' exercise'+(sug.length>1?'s':'')+' ✓ — rotation clocks reset, logs start fresh.');
+}
+function shuffleHTML(dayKey){
+  const sug=smartShuffle(dayKey);
+  if(!sug.length)return '';
+  return `<div class="card" style="border-color:var(--accent)"><h3>🔀 Smart shuffle suggests</h3>
+    ${sug.map(s=>`<div style="padding:7px 0;border-bottom:1px dashed var(--line);font-size:13.5px">
+      <b>${s.from}</b> → <b style="color:var(--accent)">${s.to}</b>
+      <div class="muted" style="font-size:12px">${s.why}</div></div>`).join('')}
+    <div class="muted" style="font-size:12px;margin:8px 0 0">Based on your logs: stalled lifts and stale rotations get swapped; lifts that are progressing are left alone. Least-recently-used alternatives are picked so variants cycle.</div>
+    <button style="width:100%;margin-top:10px" onclick="applyShuffle('${dayKey}')">Apply shuffle</button></div>`;
 }
 
 /* ----- rest timer ----- */
