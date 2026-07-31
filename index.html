@@ -360,7 +360,32 @@ const PROGRAM={
     alts:["Pallof press","Hanging leg raise","Russian twist (light)"]},
  ]},
 };
-const WEEK=[["push1","Mon"],["pull1","Tue"],["legs","Wed"],["push2","Thu"],["pull2","Fri"]];
+// exercise pool by id (same ids across splits -> logs/PRs/rotation carry over)
+const EXPOOL={};for(const k in PROGRAM)PROGRAM[k].ex.forEach(e=>EXPOOL[e.id]=e);
+const P=id=>EXPOOL[id];
+// composed days for other splits (reuse pool exercises)
+PROGRAM.upperA={name:"Upper A — Push bias",ex:[P('p1a'),P('l1a'),P('p1c'),P('l1b'),P('p1e'),P('l1e'),P('p1f')].filter(Boolean)};
+PROGRAM.lowerA={name:"Lower A — Quad focus",ex:[P('g1a'),P('g1d'),P('g1c'),P('g1e'),P('g1f'),P('g1g')].filter(Boolean)};
+PROGRAM.upperB={name:"Upper B — Pull bias",ex:[P('l2a'),P('p2a'),P('l2b'),P('p2b'),P('l2e'),P('p2e'),P('l2g')].filter(Boolean)};
+PROGRAM.lowerB={name:"Lower B — Glute/ham",ex:[P('g1b'),P('g1a'),P('g1c'),P('g1d'),P('g1f'),P('p2f')].filter(Boolean)};
+PROGRAM.fullA={name:"Full A — Push lead",ex:[P('p1a'),P('l1a'),P('g1a'),P('p1c'),P('l1e'),P('p1f')].filter(Boolean)};
+PROGRAM.fullB={name:"Full B — Pull lead",ex:[P('l1b'),P('p2a'),P('g1b'),P('l1c'),P('p1e'),P('g1g')].filter(Boolean)};
+PROGRAM.fullC={name:"Full C — Legs lead",ex:[P('g1a'),P('p2c'),P('l2a'),P('g1d'),P('p2b'),P('l2g')].filter(Boolean)};
+// splits: week = [dayKey,label]; sched maps JS weekday -> slot (-1 rest)
+const SPLITS={
+ ppl5:{name:"PPL ×5 (Mon–Fri)",week:[["push1","Mon"],["pull1","Tue"],["legs","Wed"],["push2","Thu"],["pull2","Fri"]],
+   sched:{1:0,2:1,3:2,4:3,5:4,6:-1,0:-1},rest:"Sat / Sun"},
+ ul4:{name:"Upper/Lower ×4",week:[["upperA","Mon"],["lowerA","Tue"],["upperB","Thu"],["lowerB","Fri"]],
+   sched:{1:0,2:1,3:-1,4:2,5:3,6:-1,0:-1},rest:"Wed / Sat / Sun"},
+ pplul5:{name:"PPL + UL hybrid ×5",week:[["push1","Mon"],["pull1","Tue"],["legs","Wed"],["upperA","Thu"],["lowerB","Fri"]],
+   sched:{1:0,2:1,3:2,4:3,5:4,6:-1,0:-1},rest:"Sat / Sun"},
+ fb3:{name:"Full Body ×3",week:[["fullA","Mon"],["fullB","Wed"],["fullC","Fri"]],
+   sched:{1:0,2:-1,3:1,4:-1,5:2,6:-1,0:-1},rest:"Tue / Thu / Sat / Sun"},
+};
+DB.split=SPLITS[DB.split]?DB.split:'ppl5';
+function curSplit(){return SPLITS[DB.split];}
+function WEEKN(){return curSplit().week;}
+function setSplit(k){if(!SPLITS[k])return;DB.split=k;curDay=null;save();renderTrain();}
 // cardio / steps prescription per day
 const CARDIO={
  push1:"10 min incline-treadmill warm-up + 8–10k steps across the day.",
@@ -368,11 +393,13 @@ const CARDIO={
  legs:"Skip pre-cardio (save legs). 15 min easy incline walk after + 8k steps.",
  push2:"10 min incline-treadmill warm-up + optional 12 min steady cardio finisher.",
  pull2:"5 min warm-up + 15–20 min Zone-2 cardio finisher (LISS) for the lean look + 10k steps.",
+ lowerA:"Skip pre-cardio (save legs). 15 min easy incline walk after + 8k steps.",
+ lowerB:"Skip pre-cardio (save legs). 15 min easy incline walk after + 8k steps.",
 };
+const CARDIO_DEFAULT="5–10 min easy warm-up + 8–10k steps across the day; optional 12–15 min Zone-2 finisher.";
+function cardioFor(k){return CARDIO[k]||CARDIO_DEFAULT;}
 function todaysSlot(){
-  // Mon–Fri training, Sat/Sun rest
-  const map={1:0,2:1,3:2,4:3,5:4,6:-1,0:-1};
-  return map[new Date().getDay()];
+  return curSplit().sched[new Date().getDay()];
 }
 function rotState(id){
   const start=DB.rotation[id]||today();
@@ -384,11 +411,17 @@ function rotState(id){
 /* ---------------- TRAIN render ---------------- */
 let curDay=null;
 function renderTrain(){
+  const WEEK=WEEKN();
   if(curDay===null){const s=todaysSlot();curDay=s>=0?s:0;}
+  if(curDay>=WEEK.length)curDay=0;
   const seg=document.getElementById('daySeg');
   seg.innerHTML=WEEK.map((d,i)=>`<button class="${i===curDay?'on':''}" onclick="curDay=${i};renderTrain()">${PROGRAM[d[0]].name.split(' — ')[0]}</button>`).join('');
   const key=WEEK[curDay][0], day=PROGRAM[key];
-  document.getElementById('dayHead').innerHTML=`<div class="card tight"><b>${day.name}</b> · <span class="muted">${WEEK[curDay][1]}</span><div class="muted" style="font-size:12.5px;margin-top:4px">Tap an exercise to log sets, see alternatives, and check rotation status.</div></div>`+shuffleHTML(key);
+  document.getElementById('dayHead').innerHTML=
+   `<div class="card tight"><label style="margin-bottom:4px">Training split</label>
+     <select onchange="setSplit(this.value)">${Object.keys(SPLITS).map(k=>`<option value="${k}" ${k===DB.split?'selected':''}>${SPLITS[k].name}</option>`).join('')}</select>
+     <div class="muted" style="font-size:12px;margin-top:6px">Your logs, PRs and rotation follow each exercise across splits.</div></div>`+
+   `<div class="card tight"><b>${day.name}</b> · <span class="muted">${WEEK[curDay][1]}</span><div class="muted" style="font-size:12.5px;margin-top:4px">Tap an exercise to log sets, see alternatives, and check rotation status.</div></div>`+shuffleHTML(key);
   document.getElementById('exList').innerHTML=day.ex.map(ex=>{
     const r=rotState(ex.id);
     const n=setCount(ex.sets), repTarget=ex.sets.split('×')[1]?.trim()||'';
@@ -433,13 +466,13 @@ function renderTrain(){
   }).join('');
   // cardio + steps finisher
   document.getElementById('exList').innerHTML+=`<div class="card"><h3>Cardio & steps</h3>
-    <div class="note">${CARDIO[key]}</div>
+    <div class="note">${cardioFor(key)}</div>
     <div class="muted" style="font-size:12.5px">Lean K-athletic look = stay active daily. Aim 8–10k steps; keep cardio mostly low-intensity (Zone 2) so it doesn't eat into recovery or muscle.</div>
     <button style="width:100%;margin-top:10px" onclick="finishWorkout('${key}')">✓ Finish workout</button></div>`+
     historyHTML();
   document.getElementById('weekStruct').innerHTML=
     WEEK.map(d=>`<span class="pill">${d[1]}: ${PROGRAM[d[0]].name.split(' — ')[0]}</span>`).join('')+
-    `<span class="pill">Sat / Sun: rest + light cardio/steps</span>`;
+    `<span class="pill">${curSplit().rest}: rest + light cardio/steps</span>`;
 }
 function setCount(s){const m=s.match(/(\d+)\s*×/);return m?+m[1]:3;}
 function logSet(id,i,k,v){DB.logs[id]=DB.logs[id]||{};DB.logs[id].sets=DB.logs[id].sets||[];
@@ -578,7 +611,7 @@ function overload(h){
 }
 function renderProgress(){
   // ---- weekly progressive-overload summary ----
-  const wk=[];for(const k in PROGRAM)PROGRAM[k].ex.forEach(ex=>{const h=DB.exHist[ex.id];if(h&&h.length)wk.push(overload(h));});
+  const wk=[];for(const id in EXPOOL){const h=DB.exHist[id];if(h&&h.length)wk.push(overload(h));}
   const prog=wk.filter(o=>o.tag.startsWith('progressing')).length;
   const stall=wk.filter(o=>o.tag.startsWith('stalled')).length;
   let head=`<div class="card"><h2>Progressive overload</h2>`;
@@ -596,7 +629,7 @@ function renderProgress(){
 
   // ---- per-lift detail ----
   let lHTML='';
-  for(const k in PROGRAM){
+  for(const k of ['push1','pull1','legs','push2','pull2']){ // base days only — composed splits reuse the same lifts
     const rows=PROGRAM[k].ex.filter(ex=>(DB.exHist[ex.id]||[]).length).map(ex=>{
       const h=DB.exHist[ex.id];const last=h[h.length-1];const o=overload(h);
       const recent=h.slice(-4).map(x=>`${x.d.slice(5)}: ${x.w}kg×${x.r} <span class="muted">(e1RM ${e1RM(x.w,x.r)})</span>`).join(' · ');
@@ -725,7 +758,7 @@ function renderHome(){
   const slot=todaysSlot();
   document.getElementById('todayPlan').innerHTML = slot<0
     ? `<div class="big" style="font-size:22px">Rest day 🧘</div><div class="muted">Light cardio / 8–10k steps / mobility. Keep protein high.</div>`
-    : `<div class="big" style="font-size:22px">${PROGRAM[WEEK[slot][0]].name}</div><div class="muted">Tap <b>Train</b> to log it. ${PROGRAM[WEEK[slot][0]].ex.length} exercises.</div>`;
+    : `<div class="big" style="font-size:22px">${PROGRAM[WEEKN()[slot][0]].name}</div><div class="muted">Tap <b>Train</b> to log it. ${PROGRAM[WEEKN()[slot][0]].ex.length} exercises.</div>`;
 
   // snapshot
   const s=DB.stats;
