@@ -392,9 +392,46 @@ const SPLITS={
    sched:{1:0,2:-1,3:1,4:-1,5:2,6:-1,0:-1},rest:"Tue / Thu / Sat / Sun"},
 };
 DB.split=SPLITS[DB.split]?DB.split:'ppl5';
+DB.splitStart=DB.splitStart||today();   // when current split began
+DB.autoSplit=DB.autoSplit||false;       // auto-pilot: apply split rotation automatically
 function curSplit(){return SPLITS[DB.split];}
 function WEEKN(){return curSplit().week;}
-function setSplit(k){if(!SPLITS[k])return;DB.split=k;curDay=null;save();renderTrain();}
+function setSplit(k){if(!SPLITS[k])return;if(k!==DB.split)DB.splitStart=today();DB.split=k;curDay=null;save();renderTrain();}
+
+/* ----- split auto-rotation: learn from overload data ----- */
+// Triggers: >=40% of tracked lifts stalled (stimulus exhausted) OR >=10 weeks on same split.
+// Next split favors a different stimulus: more frequency if stalling, variety if just stale.
+function splitAdvice(){
+  const wk=[];for(const id in EXPOOL){const h=DB.exHist[id];if(h&&h.length)wk.push(overload(h));}
+  const tracked=wk.length, stall=wk.filter(o=>o.tag.startsWith('stalled')).length;
+  const weeks=Math.floor(daysBetween(DB.splitStart,today())/7);
+  const order=['ppl5','pplul5','ul4','fb3'];
+  const next=order[(order.indexOf(DB.split)+1)%order.length];
+  if(weeks<3)return null; // give any split 3+ weeks before judging it
+  if(tracked>=4&&stall/tracked>=0.4)
+    return {to:next,why:`${stall} of your ${tracked} tracked lifts are stalled — the current stimulus is tapped out. Switching split changes frequency & recovery pattern, which usually restarts progress.`,weeks};
+  if(weeks>=10)
+    return {to:next,why:`${weeks} weeks on ${curSplit().name} — past the point where a program stops feeling novel. A block on a different split keeps adaptation coming.`,weeks};
+  return null;
+}
+function applySplitAdvice(){const a=splitAdvice();if(!a)return;setSplit(a.to);
+  DB.lastAutoSplit={d:today(),to:a.to};save();renderHome();}
+function splitAdviceHTML(){
+  const a=splitAdvice();
+  const auto=`<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-top:8px">
+    <input type="checkbox" style="width:auto" ${DB.autoSplit?'checked':''} onchange="DB.autoSplit=this.checked;save()">
+    Auto-pilot: switch splits for me automatically</label>`;
+  if(!a){
+    const note=DB.lastAutoSplit&&DB.lastAutoSplit.d===today()
+      ?`<div class="goodbox">🤖 Auto-pilot switched you to <b>${SPLITS[DB.lastAutoSplit.to].name}</b> today, based on your data. Your logs & PRs carried over.</div>`:'';
+    return note?`<div class="card">${note}${auto}</div>`:'';
+  }
+  return `<div class="card" style="border-color:var(--accent)"><h3>🔄 Split rotation suggested</h3>
+    <div style="font-size:14px;margin:4px 0"><b>${curSplit().name}</b> → <b style="color:var(--accent)">${SPLITS[a.to].name}</b></div>
+    <div class="muted" style="font-size:12.5px">${a.why}</div>
+    <div class="muted" style="font-size:12px;margin-top:4px">All your logs, PRs and rotations carry over — same lifts, new weekly structure.</div>
+    <button style="width:100%;margin-top:10px" onclick="applySplitAdvice()">Switch split</button>${auto}</div>`;
+}
 // cardio / steps prescription per day
 const CARDIO={
  push1:"10 min incline-treadmill warm-up + 8–10k steps across the day.",
@@ -453,7 +490,7 @@ function renderTrain(){
         <span class="badge ${r.due?'b-rotate':'b-fresh'}">${r.due?'rotate':r.weeks+'w'}</span>
       </div>
       <div class="body hide">
-        <div class="note">${ex.cue}</div>
+        <div class="note">${ex.cue} <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(nm+' exercise proper form')}" target="_blank" rel="noopener" style="white-space:nowrap">▶ Watch form video</a></div>
         ${r.due?`<div class="warnbox">On this variation ${r.weeks} weeks — time to rotate. Pick a different option below to make it your new default.</div>`:''}
         ${(()=>{const eh=DB.exHist[ex.id];if(!eh||!eh.length)return '';const lt=eh[eh.length-1];
           return `<div class="goodbox" style="padding:8px 11px">🎯 Beat last time: <b>${lt.w}kg × ${lt.r}</b> <span class="muted">(${lt.d.slice(5)}) — add a rep or 2.5kg</span></div>`;})()}
@@ -783,7 +820,7 @@ function renderHome(){
   const ySlot=curSplit().sched[yd.getDay()];
   if(ySlot>=0&&!DB.history.some(h=>h.d===ydISO)&&DB.history.length)
     nud.push(`📅 Yesterday's <b>${PROGRAM[curSplit().week[ySlot][0]].name.split(' — ')[0]}</b> wasn't logged. Missed it? No stress — do it today and slide the week, or just carry on.`);
-  document.getElementById('nudges').innerHTML=nud.map(n=>`<div class="warnbox" style="font-size:13px">${n}</div>`).join('');
+  document.getElementById('nudges').innerHTML=nud.map(n=>`<div class="warnbox" style="font-size:13px">${n}</div>`).join('')+splitAdviceHTML();
 
   // snapshot
   const s=DB.stats;
@@ -987,6 +1024,7 @@ function dietView(v){
 }
 
 /* ---------------- boot ---------------- */
+if(DB.autoSplit&&splitAdvice())applySplitAdvice(); // auto-pilot acts on open, then tells you on Home
 renderHome();
 </script>
 </body>
