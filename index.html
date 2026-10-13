@@ -230,6 +230,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:13px;padding:4px 0}
 
 <!-- ============ PROGRESS ============ -->
 <section id="t-progress" class="wrap hide">
+  <div id="progInsights"></div>
   <div id="progSessions"></div>
   <div id="progLifts"></div>
 </section>
@@ -671,7 +672,127 @@ function overload(h){
   if(stalled)return {tag:'stalled ⚠',col:'var(--warn)',msg:'No e1RM gain in 3 sessions — add 1 rep per set, or if you hit the top of the range on all sets, add 2.5kg. Or swap the variation.',e1:last,e};
   return {tag:'holding —',col:'var(--muted)',msg:`Below your best (${bestPrev}kg). Aim to beat it next session.`,e1:last,e};
 }
+/* ----- Insights: summary, charts, data-driven tips ----- */
+const CORE_IDS=new Set(['p1f','p2f','l1g','g1g','l2g']);
+function groupOf(id){return CORE_IDS.has(id)?'Core':({p:'Push',l:'Pull',g:'Legs'})[id[0]];}
+function weekStart(iso){const d=new Date(iso+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7));return d.toISOString().slice(0,10);}
+function pct(a,b){return b?Math.round((a-b)/b*1000)/10:0;}
+function insightData(){
+  const lifts=[];
+  for(const id in EXPOOL){const h=DB.exHist[id];if(!h||!h.length)continue;
+    const o=overload(h);
+    lifts.push({id,grp:groupOf(id),o,chg:h.length>1?pct(o.e[o.e.length-1],o.e[0]):null});}
+  const status={progressing:0,holding:0,stalled:0,baseline:0};
+  lifts.forEach(l=>status[l.o.tag.split(' ')[0]]++);
+  const groups=['Push','Pull','Legs','Core'].map(g=>{
+    const ls=lifts.filter(l=>l.grp===g&&l.chg!=null);
+    return {g,n:ls.length,chg:ls.length?Math.round(ls.reduce((s,l)=>s+l.chg,0)/ls.length*10)/10:null,
+      stalled:lifts.filter(l=>l.grp===g&&l.o.tag.startsWith('stalled')).length};});
+  const perWk=Object.values(curSplit().sched).filter(s=>s>=0).length;
+  const since=new Date(Date.now()-28*864e5).toISOString().slice(0,10);
+  const done28=DB.history.filter(h=>h.d>=since).length, plan28=perWk*4;
+  const weeks=[];const ws0=weekStart(today());
+  for(let i=7;i>=0;i--){const d=new Date(ws0+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-7*i);weeks.push({w:d.toISOString().slice(0,10),vol:0,n:0});}
+  DB.history.forEach(h=>{const b=weeks.find(x=>x.w===weekStart(h.d));if(b){b.vol+=h.volume||0;b.n++;}});
+  const withChg=lifts.filter(l=>l.chg!=null);
+  const avgChg=withChg.length?Math.round(withChg.reduce((s,l)=>s+l.chg,0)/withChg.length*10)/10:null;
+  return {lifts,status,groups,done28,plan28,weeks,avgChg};
+}
+function donutSVG(st){
+  const segs=[['progressing','var(--good)','▲ Progressing'],['holding','#6b6b7b','— Holding'],['stalled','var(--warn)','⚠ Stalled'],['baseline','#3a3a48','○ Baseline']];
+  const tot=segs.reduce((s,x)=>s+st[x[0]],0)||1;
+  const R=48,C=2*Math.PI*R,gap=tot>1?3:0;let off=0,arcs='';
+  segs.forEach(([k,col,lab])=>{const v=st[k];if(!v)return;const len=v/tot*C;
+    arcs+=`<circle cx="60" cy="60" r="${R}" fill="none" style="stroke:${col}" stroke-width="16"
+      stroke-dasharray="${Math.max(len-gap,0.1)} ${C}" stroke-dashoffset="${-off}" transform="rotate(-90 60 60)"><title>${lab}: ${v} lift${v>1?'s':''}</title></circle>`;
+    off+=len;});
+  const legend=segs.filter(s=>st[s[0]]).map(([k,col,lab])=>`<div style="display:flex;align-items:center;gap:8px;font-size:13px;padding:3px 0">
+    <span style="width:10px;height:10px;border-radius:3px;background:${col};flex:0 0 auto"></span><span style="flex:1">${lab}</span><b>${st[k]}</b></div>`).join('');
+  return `<div style="display:flex;align-items:center;gap:16px">
+    <svg viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="Lift status breakdown">${arcs}
+      <text x="60" y="58" text-anchor="middle" style="fill:var(--txt);font-size:22px;font-weight:800">${tot}</text>
+      <text x="60" y="74" text-anchor="middle" style="fill:var(--muted);font-size:10px">lifts</text></svg>
+    <div style="flex:1">${legend}</div></div>`;
+}
+function groupBarsHTML(groups){
+  const gs=groups.filter(g=>g.chg!=null);
+  if(!gs.length)return `<div class="muted" style="font-size:12.5px">Needs 2+ finished sessions on a lift to show change.</div>`;
+  const m=Math.max(5,...gs.map(g=>Math.abs(g.chg)));
+  return gs.map(g=>{const w=Math.abs(g.chg)/m*50,pos=g.chg>=0;
+    return `<div style="display:flex;align-items:center;gap:8px;margin:7px 0;font-size:13px" title="${g.g}: ${g.chg>0?'+':''}${g.chg}% avg est. 1RM across ${g.n} lift${g.n>1?'s':''}">
+      <span style="width:42px">${g.g}</span>
+      <div style="flex:1;position:relative;height:14px">
+        <div style="position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--line)"></div>
+        <div style="position:absolute;top:0;height:14px;${pos?`left:50%;border-radius:0 4px 4px 0`:`right:50%;border-radius:4px 0 0 4px`};width:${w}%;background:${pos?'var(--good)':'var(--bad)'}"></div></div>
+      <b style="width:54px;text-align:right">${g.chg>0?'+':''}${g.chg}%</b></div>`;}).join('');
+}
+function volumeBarsSVG(weeks){
+  const max=Math.max(...weeks.map(w=>w.vol));
+  if(!max)return `<div class="muted" style="font-size:12.5px">Finish workouts to see weekly volume.</div>`;
+  const W=300,H=110,bw=W/weeks.length;let bars='';
+  weeks.forEach((w,i)=>{const h=Math.round(w.vol/max*(H-24));const x=i*bw+4,y=H-14-h;
+    const lab=`Week of ${w.w.slice(5)}: ${w.vol} kg · ${w.n} session${w.n===1?'':'s'}`;
+    bars+=`<g><title>${lab}</title><rect x="${i*bw}" y="0" width="${bw}" height="${H}" fill="transparent"/>`+
+      (h?`<rect x="${x}" y="${y}" width="${bw-8}" height="${h}" rx="4" style="fill:var(--accent)"/><rect x="${x}" y="${y+h-Math.min(4,h)}" width="${bw-8}" height="${Math.min(4,h)}" style="fill:var(--accent)"/>`:'')+
+      `<text x="${x+(bw-8)/2}" y="${H-2}" text-anchor="middle" style="fill:var(--muted);font-size:9px">${w.w.slice(8)}/${w.w.slice(5,7)}</text></g>`;});
+  const last=weeks[weeks.length-1];
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Weekly training volume, last 8 weeks">
+    <line x1="0" x2="${W}" y1="${H-14}" y2="${H-14}" style="stroke:var(--line)"/>${bars}</svg>
+    <div class="muted" style="font-size:12px">This week so far: <b style="color:var(--txt)">${last.vol} kg</b> across ${last.n} session${last.n===1?'':'s'} · tap a bar for details</div>`;
+}
+function insightTips(d){
+  const t=[];const cons=d.plan28?d.done28/d.plan28:0;
+  const gs=d.groups.filter(g=>g.chg!=null&&g.n);
+  if(d.plan28&&DB.history.length){
+    if(cons<0.75)t.push(['📅',`You trained <b>${d.done28} of ${d.plan28}</b> planned sessions in 4 weeks (${Math.round(cons*100)}%). Showing up beats everything — if 5 days is too many right now, try the Upper/Lower ×4 split.`]);
+    else if(cons>=0.9)t.push(['🔥',`<b>${Math.round(Math.min(cons,1)*100)}% consistency</b> over 4 weeks — that's the real driver of results. Keep it.`]);
+  }
+  if(gs.length>=2){
+    const lag=[...gs].sort((a,b)=>a.chg-b.chg)[0];
+    if(lag.chg<=1){
+      if(lag.g==='Legs'&&DB.split==='ppl5')t.push(['🦵',`Legs are lagging (${lag.chg>0?'+':''}${lag.chg}%). PPL ×5 only trains legs once a week — the <b>PPL + UL hybrid</b> split gives them a second day.`]);
+      else t.push(['🎯',`<b>${lag.g}</b> is your weakest area (${lag.chg>0?'+':''}${lag.chg}%). Put those exercises first in the session while you're fresh, and aim for +1 rep each time.`]);
+    }
+    const push=gs.find(g=>g.g==='Push'),pull=gs.find(g=>g.g==='Pull');
+    if(push&&pull&&push.chg-pull.chg>5)t.push(['🧍',`Push (+${push.chg}%) is outpacing Pull (${pull.chg>0?'+':''}${pull.chg}%). Add a set to rows & rear-delt work — it protects your shoulders and builds the upright, wide-back look.`]);
+  }
+  if(d.status.stalled>=2)t.push(['🔀',`${d.status.stalled} lifts are stalled. Open <b>Train</b> — Smart Shuffle has swap suggestions ready.`]);
+  const full=d.weeks.slice(0,-1).filter(w=>w.vol);
+  if(full.length>=3){
+    const prev=full.slice(0,-1),avg=prev.reduce((s,w)=>s+w.vol,0)/prev.length,lastFull=full[full.length-1];
+    if(lastFull.vol<avg*0.7)t.push(['📉',`Last week's volume (${lastFull.vol} kg) was well below your usual ~${Math.round(avg)} kg. Missed sessions, or poor sleep/stress? One light week is fine — two in a row, check recovery.`]);
+    else if(full.length>=6&&full.slice(-6).every((w,i,a)=>i===0||w.vol>=a[i-1].vol*0.95))t.push(['😮‍💨',`6+ weeks of steady hard training without a lighter week. Plan a <b>deload</b>: same exercises, half the sets, for one week — you'll come back stronger.`]);
+  }
+  const p=decidePhase();
+  if(d.avgChg!=null&&p.label==='Cut'){
+    if(d.avgChg<0)t.push(['🍳',`Strength is slipping on your cut (${d.avgChg}%). Hit your <b>${proteinTarget()} g protein</b> daily and eat at the top of your calorie target — slow the cut rather than lose muscle.`]);
+    else t.push(['✅',`You're holding/gaining strength (+${d.avgChg}%) while cutting — that's the ideal recomp signal. Stay the course.`]);
+  }
+  if(d.avgChg!=null&&p.label==='Lean bulk'&&d.avgChg<2&&DB.history.length>=12)t.push(['⬆️',`On a lean bulk but strength is barely moving (+${d.avgChg}%). Make sure you're actually adding reps/weight each week — the surplus only builds muscle if training pushes it.`]);
+  return t.slice(0,5);
+}
+function renderInsights(){
+  const el=document.getElementById('progInsights');
+  const d=insightData();
+  if(!d.lifts.length&&!DB.history.length){
+    el.innerHTML=`<div class="card"><h2>Your progress</h2><div class="muted">Log your sets and tap <b>✓ Finish workout</b> after each session. After 2–3 sessions this page turns into a summary, charts, and personal tips.</div></div>`;return;}
+  const cons=d.plan28?Math.round(Math.min(d.done28/d.plan28,1)*100):0;
+  const gs=d.groups.filter(g=>g.chg!=null);
+  const best=gs.length?[...gs].sort((a,b)=>b.chg-a.chg)[0]:null, worst=gs.length>1?[...gs].sort((a,b)=>a.chg-b.chg)[0]:null;
+  let sum=`In the last 4 weeks you trained <b>${d.done28} of ${d.plan28}</b> planned sessions (${cons}%).`;
+  if(d.avgChg!=null)sum+=` Across your lifts, estimated strength is <b style="color:${d.avgChg>=0?'var(--good)':'var(--bad)'}">${d.avgChg>0?'+':''}${d.avgChg}%</b> since you started tracking.`;
+  if(best)sum+=` Strongest area: <b>${best.g}</b> (${best.chg>0?'+':''}${best.chg}%).`;
+  if(worst&&worst.g!==best.g)sum+=` Needs attention: <b>${worst.g}</b> (${worst.chg>0?'+':''}${worst.chg}%).`;
+  sum+=` ${d.status.progressing} lift${d.status.progressing===1?' is':'s are'} hitting new bests${d.status.stalled?`, ${d.status.stalled} stalled`:''}.`;
+  const tips=insightTips(d);
+  el.innerHTML=`<div class="card"><h2>Your progress</h2><div style="font-size:14.5px;line-height:1.55">${sum}</div></div>
+    ${d.lifts.length?`<div class="card"><h3>Lift status</h3>${donutSVG(d.status)}</div>`:''}
+    <div class="card"><h3>Strength change by area <span class="muted" style="text-transform:none;font-weight:400">(avg est. 1RM)</span></h3>${groupBarsHTML(d.groups)}</div>
+    <div class="card"><h3>Weekly volume <span class="muted" style="text-transform:none;font-weight:400">(kg lifted, last 8 weeks)</span></h3>${volumeBarsSVG(d.weeks)}</div>
+    ${tips.length?`<div class="card"><h3>Tips from your data</h3>${tips.map(([i,x])=>`<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13.5px"><span>${i}</span><span>${x}</span></div>`).join('')}</div>`:''}`;
+}
 function renderProgress(){
+  renderInsights();
   // ---- weekly progressive-overload summary ----
   const wk=[];for(const id in EXPOOL){const h=DB.exHist[id];if(h&&h.length)wk.push(overload(h));}
   const prog=wk.filter(o=>o.tag.startsWith('progressing')).length;
