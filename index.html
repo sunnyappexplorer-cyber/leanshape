@@ -617,11 +617,27 @@ function beep(){try{const a=new(window.AudioContext||window.webkitAudioContext)(
 /* ----- finish workout + history ----- */
 function finishWorkout(key){
   const day=PROGRAM[key];let total=0,vol=0,done=0;
+  const ok=v=>parseFloat(v)>0;
+  // validate: need at least one complete set; no half-filled sets
+  const partial=[];let complete=0;
+  day.ex.forEach(ex=>((DB.logs[ex.id]||{}).sets||[]).forEach((x,i)=>{
+    if(!x)return;const hw=ok(x.w),hr=ok(x.r);
+    if(hw&&hr)complete++;else if(hw||hr)partial.push((DB.variant[ex.id]||ex.name)+' — set '+(i+1));
+  }));
+  if(partial.length){alert('These sets are missing weight or reps:\n\n• '+partial.join('\n• ')+'\n\nFill them in or clear them, then finish.');return;}
+  if(!complete){alert('Nothing to save yet — log at least one set with both weight (kg) and reps.');return;}
+  // one session per day
+  const prev=DB.history.findIndex(h=>h.d===today());
+  if(prev>=0){
+    if(!confirm('You already logged "'+DB.history[prev].day.split(' — ')[0]+'" today.\n\nReplace it with this session? (Cancel keeps the existing entry.)'))return;
+    DB.history.splice(prev,1);
+    for(const id in DB.exHist)DB.exHist[id]=DB.exHist[id].filter(e=>e.d!==today());
+  }
   day.ex.forEach(ex=>{
     const s=(DB.logs[ex.id]||{}).sets||[];
     let top=null;
-    s.forEach(x=>{if(x&&x.w){done++;vol+=(+x.w||0)*(+x.r||0);
-      if(!top||(+x.w)>(+top.w))top={w:+x.w,r:+x.r||0};}});
+    s.forEach(x=>{if(x&&ok(x.w)&&ok(x.r)){done++;vol+=(+x.w)*(+x.r);
+      if(!top||(+x.w)>(+top.w))top={w:+x.w,r:+x.r};}});
     total+=setCount(ex.sets);
     if(top){ // record this session's top set for progress tracking
       DB.exHist[ex.id]=DB.exHist[ex.id]||[];
@@ -851,6 +867,8 @@ function loadStatsForm(){const s=DB.stats;
 }
 function saveStats(){
   const g=id=>document.getElementById(id).value;
+  const miss=[['s_age','Age'],['s_ht','Height'],['s_wt','Weight']].filter(([id])=>!(parseFloat(g(id))>0)).map(x=>x[1]);
+  if(miss.length){alert('Please fill: '+miss.join(', '));return;}
   Object.assign(DB.stats,{sex:g('s_sex'),age:g('s_age'),ht:g('s_ht'),wt:g('s_wt'),
     act:g('s_act'),goal:g('s_goal'),waist:g('s_waist'),neck:g('s_neck'),hip:g('s_hip'),bf:g('s_bf')});
   if(DB.stats.wt){
